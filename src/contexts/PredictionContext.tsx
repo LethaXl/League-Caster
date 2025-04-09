@@ -45,6 +45,9 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
     setPredictedStandings([]);
     setIsViewingStandings(false);
     localStorage.removeItem('predictionState');
+    
+    // Also clear completed matchdays for all leagues
+    localStorage.removeItem('completedMatchdays');
   };
 
   return (

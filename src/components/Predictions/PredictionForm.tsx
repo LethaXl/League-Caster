@@ -12,7 +12,15 @@ interface PredictionFormProps {
   initialStandings: Standing[];
 }
 
-const MAX_MATCHDAY = 38;
+// Function to determine the max matchday for a league
+const getMaxMatchday = (leagueCode: string): number => {
+  // Bundesliga and Ligue 1 have 18 teams (34 matchdays)
+  if (leagueCode === 'BL1' || leagueCode === 'FL1') {
+    return 34;
+  }
+  // Premier League, La Liga, Serie A have 20 teams (38 matchdays)
+  return 38;
+};
 
 export default function PredictionForm({ leagueCode, initialStandings }: PredictionFormProps) {
   const {
@@ -30,6 +38,9 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
   const [error, setError] = useState<string | null>(null);
   const [isCheckingMatchdays, setIsCheckingMatchdays] = useState(false);
   
+  // Get the maximum matchday for this league
+  const MAX_MATCHDAY = getMaxMatchday(leagueCode);
+  
   // Cache for matchday data to reduce API calls
   const matchdayCache = useRef<Map<number, Match[]>>(new Map());
   // Keep track of matchdays we've already checked to avoid duplicate API calls
@@ -39,6 +50,29 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
     const fetchMatches = async (matchday: number) => {
       if (loading && checkedMatchdays.current.has(matchday)) {
         return; // Skip if we're already checking this matchday
+      }
+      
+      // Check if this matchday has been completed
+      const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+      const isCompleted = completedMatchdays[leagueCode]?.includes(matchday);
+      
+      // If this matchday is completed, find the next uncompleted matchday
+      if (isCompleted && !isCheckingMatchdays) {
+        setIsCheckingMatchdays(true);
+        // Find the next uncompleted matchday
+        let nextUncompleted = matchday;
+        const completed = completedMatchdays[leagueCode] || [];
+        
+        while (completed.includes(nextUncompleted) && nextUncompleted <= MAX_MATCHDAY) {
+          nextUncompleted++;
+        }
+        
+        if (nextUncompleted <= MAX_MATCHDAY) {
+          setCurrentMatchday(nextUncompleted);
+          setIsCheckingMatchdays(false);
+          return;
+        }
+        // If all matchdays are completed, continue with the current one
       }
       
       setLoading(true);
@@ -176,6 +210,11 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
   const handleSubmit = async () => {
     let updatedStandings = [...predictedStandings];
 
+    // Store the current matchday as completed
+    const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+    completedMatchdays[leagueCode] = [...(completedMatchdays[leagueCode] || []), currentMatchday];
+    localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
+
     matches.forEach(match => {
       const prediction = predictions.get(match.id);
       if (prediction) {
@@ -190,6 +229,7 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
 
     setPredictedStandings(updatedStandings);
 
+    // Only show standings if we're at the very last matchday
     if (currentMatchday === MAX_MATCHDAY) {
       setIsViewingStandings(true);
       return;
@@ -198,10 +238,23 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
     // Find the next matchday with matches using cached data if possible
     setLoading(true);
     
-    // Try the next couple matchdays first (most likely to have matches)
-    for (let offset = 1; offset <= 3; offset++) {
+    // Try more matchdays to handle gaps from cancelled matches
+    let foundNextMatchday = false;
+    
+    // Check up to 10 matchdays ahead to handle larger gaps
+    for (let offset = 1; offset <= 10; offset++) {
       const nextMatchday = currentMatchday + offset;
-      if (nextMatchday > MAX_MATCHDAY) break;
+      if (nextMatchday > MAX_MATCHDAY) {
+        // If we've hit the last matchday, show the standings
+        setIsViewingStandings(true);
+        setLoading(false);
+        return;
+      }
+      
+      // Skip if this matchday was already completed
+      if (completedMatchdays[leagueCode]?.includes(nextMatchday)) {
+        continue;
+      }
       
       // Check cache first
       if (matchdayCache.current.has(nextMatchday)) {
@@ -209,6 +262,7 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
         if (cachedMatches.length > 0) {
           setCurrentMatchday(nextMatchday);
           setLoading(false);
+          foundNextMatchday = true;
           return;
         }
       } else if (!checkedMatchdays.current.has(nextMatchday)) {
@@ -221,6 +275,7 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
           if (matchData.length > 0) {
             setCurrentMatchday(nextMatchday);
             setLoading(false);
+            foundNextMatchday = true;
             return;
           }
         } catch (error) {
@@ -229,13 +284,18 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
       }
     }
     
-    // If not found in the next few, just go to view standings
-    setIsViewingStandings(true);
+    // If not found in the checked matchdays, show the final standings
+    if (!foundNextMatchday) {
+      setIsViewingStandings(true);
+    }
     setLoading(false);
   };
 
   const handleViewStandings = () => {
+    // We'll pass a special flag to indicate viewing current standings during predictions
     setIsViewingStandings(true);
+    // Store the current matchday in localStorage for reference
+    localStorage.setItem('viewingCurrentStandingsFrom', String(currentMatchday));
   };
 
   if (loading) {
@@ -268,17 +328,32 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
       <div className="text-center py-8">
         <h3 className="text-xl font-medium text-gray-900">No Matches Available</h3>
         <p className="mt-2 text-gray-600">There are no scheduled matches for matchday {currentMatchday}.</p>
-        {!isCheckingMatchdays && (
+        <div className="flex flex-col gap-3 mt-4 items-center">
+          {!isCheckingMatchdays && (
+            <button
+              onClick={() => {
+                setIsCheckingMatchdays(true);
+                findNextAvailableMatchday(currentMatchday);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+            >
+              Find Next Available Matchday
+            </button>
+          )}
           <button
             onClick={() => {
-              setIsCheckingMatchdays(true);
-              findNextAvailableMatchday(currentMatchday);
+              // Reset completed matchdays for this league
+              const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+              completedMatchdays[leagueCode] = [];
+              localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
+              // Reload the page
+              window.location.reload();
             }}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
           >
-            Find Next Available Matchday
+            Reset Progress (Fix Issues)
           </button>
-        )}
+        </div>
       </div>
     );
   }
@@ -303,7 +378,7 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
             onClick={handleSubmit}
             className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
           >
-            {currentMatchday === MAX_MATCHDAY ? 'Show Final Table' : 'Submit Predictions'}
+            Submit Predictions
           </button>
         </div>
       </div>

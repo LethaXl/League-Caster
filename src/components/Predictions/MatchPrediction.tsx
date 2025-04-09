@@ -38,7 +38,7 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
         <div className="flex items-center space-x-4">
           <div className="relative w-12 h-12">
             <Image
-              src={match.homeTeam.crest}
+              src={match.homeTeam.crest || "/placeholder-team.png"}
               alt={match.homeTeam.name}
               fill
               className="object-contain"
@@ -51,7 +51,7 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
           <span className="font-medium">{match.awayTeam.name}</span>
           <div className="relative w-12 h-12">
             <Image
-              src={match.awayTeam.crest}
+              src={match.awayTeam.crest || "/placeholder-team.png"}
               alt={match.awayTeam.name}
               fill
               className="object-contain"
@@ -63,11 +63,11 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
       <div className="flex justify-center space-x-4 mb-4">
         <button
           className={`px-4 py-2 rounded-full transition-colors ${
-            predictionType === 'win_home'
+            predictionType === 'home'
               ? 'bg-green-500 text-white'
               : 'bg-gray-100 hover:bg-gray-200'
           }`}
-          onClick={() => handlePredictionChange('win_home')}
+          onClick={() => handlePredictionChange('home')}
         >
           Home Win
         </button>
@@ -83,11 +83,11 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
         </button>
         <button
           className={`px-4 py-2 rounded-full transition-colors ${
-            predictionType === 'win_away'
+            predictionType === 'away'
               ? 'bg-green-500 text-white'
               : 'bg-gray-100 hover:bg-gray-200'
           }`}
-          onClick={() => handlePredictionChange('win_away')}
+          onClick={() => handlePredictionChange('away')}
         >
           Away Win
         </button>
