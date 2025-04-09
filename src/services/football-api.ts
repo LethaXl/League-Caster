@@ -288,4 +288,21 @@ export const updateStandings = (
   return updatedStandings;
 };
 
+// New function to get combined league data (standings and current matchday) in a single request
+export const getLeagueData = async (leagueCode: string): Promise<{ standings: Standing[], currentMatchday: number }> => {
+  return queueRequest(async () => {
+    const response = await api.get('', {
+      params: {
+        combined: 'league_data',
+        leagueCode
+      }
+    });
+    
+    return {
+      standings: response.data.standings,
+      currentMatchday: response.data.currentMatchday
+    };
+  });
+};
+
 export default api; 

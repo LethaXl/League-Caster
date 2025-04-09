@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import LeagueSelector from '@/components/Standings/LeagueSelector';
 import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
-import { getStandings, Standing, getCurrentMatchday, getMatches } from '@/services/football-api';
+import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
 
@@ -30,6 +30,8 @@ export default function Home() {
   const matchdayCache = useRef<Map<string, number>>(new Map());
   const matchesCache = useRef<Map<string, Match[]>>(new Map());
   const standingsCache = useRef<Map<string, Standing[]>>(new Map());
+  // Add state to pass fetched matches to PredictionForm
+  const [initialMatches, setInitialMatches] = useState<Match[]>([]);
 
   const {
     isViewingStandings,
@@ -63,50 +65,91 @@ export default function Home() {
     }
   }, [isViewingStandings]);
 
-  useEffect(() => {
-    if (!selectedLeague) return;
-    
-    // Generate cache keys
-    const standingsCacheKey = selectedLeague;
-    const matchdayCacheKey = selectedLeague;
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Make sure selectedLeague is not null
+      if (!selectedLeague) {
+        console.error("League not selected");
+        return;
+      }
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Try to use cached data first
-        let standingsData: Standing[];
-        let currentMatchdayData: number;
-        
-        // Get standings (from cache if available)
-        if (standingsCache.current.has(standingsCacheKey)) {
-          standingsData = standingsCache.current.get(standingsCacheKey)!;
-        } else {
-          standingsData = await getStandings(selectedLeague);
-          standingsCache.current.set(standingsCacheKey, standingsData);
-        }
-        
-        // Get current matchday (from cache if available)
-        if (matchdayCache.current.has(matchdayCacheKey)) {
-          currentMatchdayData = matchdayCache.current.get(matchdayCacheKey)!;
-        } else {
-          currentMatchdayData = await getCurrentMatchday(selectedLeague);
-          matchdayCache.current.set(matchdayCacheKey, currentMatchdayData);
-        }
+      // Try to use cached data first
+      const combinedCacheKey = selectedLeague;
+      
+      if (standingsCache.current.has(combinedCacheKey) && matchdayCache.current.has(combinedCacheKey)) {
+        // If both standings and current matchday are already cached, use them
+        const standingsData = standingsCache.current.get(combinedCacheKey)!;
+        const currentMatchdayData = matchdayCache.current.get(combinedCacheKey)!;
         
         setStandings(standingsData);
-        
         if (predictedStandings.length === 0) {
           setCurrentMatchday(currentMatchdayData);
         }
-      } catch (error: any) {
-        console.error('Error fetching data:', error);
-        setError(error.response?.data?.error || 'Failed to fetch data. Please try again later.');
-      } finally {
-        setLoading(false);
+      } else {
+        // Otherwise, use the combined endpoint to fetch both at once
+        try {
+          // Use the combined endpoint to get both standings and current matchday
+          const { standings: standingsData, currentMatchday: currentMatchdayData } = 
+            await getLeagueData(selectedLeague);
+            
+          // Cache the results
+          standingsCache.current.set(combinedCacheKey, standingsData);
+          matchdayCache.current.set(combinedCacheKey, currentMatchdayData);
+          
+          setStandings(standingsData);
+          if (predictedStandings.length === 0) {
+            setCurrentMatchday(currentMatchdayData);
+          }
+        } catch (error) {
+          console.error('Combined endpoint failed, falling back to separate requests:', error);
+          
+          // Fallback to parallel individual requests
+          let standingsPromise: Promise<Standing[]>;
+          let currentMatchdayPromise: Promise<number>;
+          
+          // Get standings (from cache if available)
+          if (standingsCache.current.has(combinedCacheKey)) {
+            standingsPromise = Promise.resolve(standingsCache.current.get(combinedCacheKey)!);
+          } else {
+            standingsPromise = getStandings(selectedLeague);
+          }
+          
+          // Get current matchday (from cache if available)
+          if (matchdayCache.current.has(combinedCacheKey)) {
+            currentMatchdayPromise = Promise.resolve(matchdayCache.current.get(combinedCacheKey)!);
+          } else {
+            currentMatchdayPromise = getCurrentMatchday(selectedLeague);
+          }
+          
+          // Run both requests in parallel
+          const [standingsData, currentMatchdayData] = await Promise.all([
+            standingsPromise,
+            currentMatchdayPromise
+          ]);
+          
+          // Cache the results
+          standingsCache.current.set(combinedCacheKey, standingsData);
+          matchdayCache.current.set(combinedCacheKey, currentMatchdayData);
+          
+          setStandings(standingsData);
+          if (predictedStandings.length === 0) {
+            setCurrentMatchday(currentMatchdayData);
+          }
+        }
       }
-    };
+    } catch (error: any) {
+      console.error('Error fetching data:', error);
+      setError(error.response?.data?.error || 'Failed to fetch data. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
+    if (!selectedLeague) return;
+    
     fetchData();
   }, [selectedLeague]);
 
@@ -119,22 +162,36 @@ export default function Home() {
       const matchdayCacheKey = selectedLeague;
       
       // Get current matchday (from cache if available)
-      let currentMatchdayData: number;
+      let currentMatchdayPromise: Promise<number>;
       if (matchdayCache.current.has(matchdayCacheKey)) {
-        currentMatchdayData = matchdayCache.current.get(matchdayCacheKey)!;
+        currentMatchdayPromise = Promise.resolve(matchdayCache.current.get(matchdayCacheKey)!);
       } else {
-        currentMatchdayData = await getCurrentMatchday(selectedLeague);
+        currentMatchdayPromise = getCurrentMatchday(selectedLeague);
+      }
+      
+      // Resolve the current matchday
+      const currentMatchdayData = await currentMatchdayPromise;
+      
+      // Cache the current matchday if needed
+      if (!matchdayCache.current.has(matchdayCacheKey)) {
         matchdayCache.current.set(matchdayCacheKey, currentMatchdayData);
       }
       
       // Check if there are matches for this matchday
       const matchesCacheKey = `${selectedLeague}_md${currentMatchdayData}`;
-      let matches: Match[];
+      let matchesPromise: Promise<Match[]>;
       
       if (matchesCache.current.has(matchesCacheKey)) {
-        matches = matchesCache.current.get(matchesCacheKey)!;
+        matchesPromise = Promise.resolve(matchesCache.current.get(matchesCacheKey)!);
       } else {
-        matches = await getMatches(selectedLeague, currentMatchdayData);
+        matchesPromise = getMatches(selectedLeague, currentMatchdayData);
+      }
+      
+      // Resolve the matches
+      let matches = await matchesPromise;
+      
+      // Cache the matches if needed
+      if (!matchesCache.current.has(matchesCacheKey)) {
         matchesCache.current.set(matchesCacheKey, matches);
       }
       
@@ -150,26 +207,32 @@ export default function Home() {
           currentMatchdayData - 2
         ].filter(md => md >= 1 && md <= getMaxMatchday(selectedLeague));
         
-        for (const md of matchdaysToCheck) {
+        // Create an array of promises for all matchdays to check in parallel
+        const matchPromises = matchdaysToCheck.map(async (md) => {
           const mdCacheKey = `${selectedLeague}_md${md}`;
-          let mdMatches: Match[];
-          
           if (matchesCache.current.has(mdCacheKey)) {
-            mdMatches = matchesCache.current.get(mdCacheKey)!;
+            return { md, matches: matchesCache.current.get(mdCacheKey)! };
           } else {
-            mdMatches = await getMatches(selectedLeague, md);
+            const mdMatches = await getMatches(selectedLeague, md);
             matchesCache.current.set(mdCacheKey, mdMatches);
+            return { md, matches: mdMatches };
           }
-          
-          if (mdMatches.length > 0) {
-            targetMatchday = md;
-            break;
-          }
+        });
+        
+        // Run all matchday checks in parallel
+        const results = await Promise.all(matchPromises);
+        
+        // Find the first matchday that has matches
+        const matchdayWithMatches = results.find(result => result.matches.length > 0);
+        if (matchdayWithMatches) {
+          targetMatchday = matchdayWithMatches.md;
+          matches = matchdayWithMatches.matches;
         }
       }
       
       resetPredictions();
       setCurrentMatchday(targetMatchday);
+      setInitialMatches(matches);
       setShowPredictions(true);
     } catch (error: any) {
       console.error('Error fetching current matchday:', error);
@@ -308,6 +371,7 @@ export default function Home() {
             <PredictionForm
               leagueCode={selectedLeague}
               initialStandings={standings}
+              initialMatches={initialMatches}
             />
           </div>
         )}

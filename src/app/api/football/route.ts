@@ -32,12 +32,49 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const endpoint = searchParams.get('endpoint');
   const matchday = searchParams.get('matchday');
+  const combined = searchParams.get('combined');
 
-  if (!endpoint) {
-    return NextResponse.json({ error: 'Endpoint parameter is required' }, { status: 400 });
+  if (!endpoint && !combined) {
+    return NextResponse.json({ error: 'Endpoint or combined parameter is required' }, { status: 400 });
   }
 
   try {
+    // Handle combined data requests
+    if (combined === 'league_data') {
+      const leagueCode = searchParams.get('leagueCode');
+      
+      if (!leagueCode) {
+        return NextResponse.json({ error: 'leagueCode is required for combined requests' }, { status: 400 });
+      }
+      
+      console.log('Making combined API request for league:', leagueCode);
+      
+      // Make parallel requests for standings and matches
+      const [standingsResponse, matchesResponse] = await Promise.all([
+        footballApi.get(`/competitions/${leagueCode}/standings`),
+        footballApi.get(`/competitions/${leagueCode}/matches`)
+      ]);
+      
+      // Extract and process data
+      const standings = standingsResponse.data.standings[0].table;
+      
+      const scheduledMatches = matchesResponse.data.matches.filter(
+        (m: any) => m.status === 'SCHEDULED' || m.status === 'TIMED'
+      );
+      
+      const currentMatchday = scheduledMatches.length > 0
+        ? Math.min(...scheduledMatches.map((m: any) => m.matchday))
+        : 1;
+      
+      // Return the combined data
+      return NextResponse.json({
+        standings,
+        currentMatchday,
+        success: true
+      });
+    }
+
+    // Original single endpoint handling
     let url = endpoint;
     if (matchday) {
       url += `?matchday=${matchday}`;

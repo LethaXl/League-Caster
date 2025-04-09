@@ -51,7 +51,6 @@ export default function StandingsTable({ standings, loading }: StandingsTablePro
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">{standing.team.name}</div>
-                    <div className="text-sm text-gray-500">{standing.team.tla}</div>
                   </div>
                 </div>
               </td>

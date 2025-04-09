@@ -10,6 +10,7 @@ import { usePrediction } from '@/contexts/PredictionContext';
 interface PredictionFormProps {
   leagueCode: string;
   initialStandings: Standing[];
+  initialMatches?: Match[];
 }
 
 // Function to determine the max matchday for a league
@@ -22,7 +23,7 @@ const getMaxMatchday = (leagueCode: string): number => {
   return 38;
 };
 
-export default function PredictionForm({ leagueCode, initialStandings }: PredictionFormProps) {
+export default function PredictionForm({ leagueCode, initialStandings, initialMatches = [] }: PredictionFormProps) {
   const {
     currentMatchday,
     setCurrentMatchday,
@@ -80,6 +81,30 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
       checkedMatchdays.current.add(matchday);
       
       try {
+        // Use initialMatches if available on first render
+        if (initialMatches.length > 0 && !matchdayCache.current.has(matchday)) {
+          setMatches(initialMatches);
+          matchdayCache.current.set(matchday, initialMatches);
+          
+          // Initialize predictions with draws
+          const initialPredictions = new Map<number, Prediction>();
+          initialMatches.forEach(match => {
+            initialPredictions.set(match.id, {
+              matchId: match.id,
+              type: 'draw'
+            });
+          });
+          setPredictions(initialPredictions);
+          
+          // Initialize standings if needed
+          if (predictedStandings.length === 0) {
+            setPredictedStandings(initialStandings);
+          }
+          
+          setLoading(false);
+          return;
+        }
+        
         // Check if we have cached data for this matchday
         if (matchdayCache.current.has(matchday)) {
           const cachedData = matchdayCache.current.get(matchday)!;
@@ -188,7 +213,7 @@ export default function PredictionForm({ leagueCode, initialStandings }: Predict
     };
 
     fetchMatches(currentMatchday);
-  }, [leagueCode, currentMatchday]);
+  }, [leagueCode, currentMatchday, initialMatches, initialStandings, predictedStandings, setPredictedStandings]);
 
   const handlePredictionChange = (
     matchId: number,
