@@ -33,129 +33,157 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mb-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-4">
-          <div className="relative w-12 h-12">
-            <Image
-              src={match.homeTeam.crest || "/placeholder-team.png"}
-              alt={match.homeTeam.name}
-              fill
-              className="object-contain"
-            />
-          </div>
-          <span className="font-medium">{match.homeTeam.name}</span>
+    <div className="bg-[#111111] rounded-lg p-4 border border-[#2a2a2a] hover:border-[#333333] transition-colors">
+      <div className="flex flex-col h-full">
+        <div className="flex-grow">
+          {predictionType !== 'custom' ? (
+            <>
+              {/* Home Team */}
+              <div className="flex items-center justify-center mb-2">
+                <div className="flex items-center">
+                  <div className="relative w-8 h-8 mr-2">
+                    <Image
+                      src={match.homeTeam.crest || "/placeholder-team.png"}
+                      alt={match.homeTeam.name}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-primary">{match.homeTeam.name}</span>
+                </div>
+              </div>
+
+              {/* VS */}
+              <div className="text-center text-xs font-medium text-secondary opacity-60 mb-2">VS</div>
+
+              {/* Away Team */}
+              <div className="flex items-center justify-center mb-3">
+                <div className="flex items-center">
+                  <span className="text-xs font-medium text-primary mr-2">{match.awayTeam.name}</span>
+                  <div className="relative w-8 h-8">
+                    <Image
+                      src={match.awayTeam.crest || "/placeholder-team.png"}
+                      alt={match.awayTeam.name}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            // Custom Score Layout
+            <div className="flex flex-col items-center mb-3">
+              <div className="flex justify-center items-center gap-6 mb-2">
+                <div className="relative w-8 h-8">
+                  <Image
+                    src={match.homeTeam.crest || "/placeholder-team.png"}
+                    alt={match.homeTeam.name}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+                <span className="text-xs font-medium text-secondary opacity-60">VS</span>
+                <div className="relative w-8 h-8">
+                  <Image
+                    src={match.awayTeam.crest || "/placeholder-team.png"}
+                    alt={match.awayTeam.name}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center">
+                  <div className="flex flex-col mr-2">
+                    <button
+                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
+                      onClick={() => handleScoreChange('home', homeGoals + 1)}
+                    >
+                      +
+                    </button>
+                    <button
+                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
+                      onClick={() => handleScoreChange('home', homeGoals - 1)}
+                    >
+                      -
+                    </button>
+                  </div>
+                  <span className="text-2xl text-primary w-6 text-center">{homeGoals}</span>
+                </div>
+
+                <span className="text-xl text-secondary">:</span>
+
+                <div className="flex items-center">
+                  <span className="text-2xl text-primary w-6 text-center">{awayGoals}</span>
+                  <div className="flex flex-col ml-2">
+                    <button
+                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
+                      onClick={() => handleScoreChange('away', awayGoals + 1)}
+                    >
+                      +
+                    </button>
+                    <button
+                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
+                      onClick={() => handleScoreChange('away', awayGoals - 1)}
+                    >
+                      -
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <span className="text-xl font-bold">VS</span>
-        <div className="flex items-center space-x-4">
-          <span className="font-medium">{match.awayTeam.name}</span>
-          <div className="relative w-12 h-12">
-            <Image
-              src={match.awayTeam.crest || "/placeholder-team.png"}
-              alt={match.awayTeam.name}
-              fill
-              className="object-contain"
-            />
-          </div>
+
+        {/* Prediction Buttons */}
+        <div className="relative flex bg-[#111111]">
+          {/* Sliding Indicator */}
+          <div 
+            className="absolute h-[1px] bg-[#f7e479] shadow-[0_0_8px_#f7e479] transition-all duration-300 ease-in-out"
+            style={{
+              width: '25%',
+              left: predictionType === 'home' ? '0%' :
+                    predictionType === 'draw' ? '25%' :
+                    predictionType === 'away' ? '50%' :
+                    '75%',
+              top: '-1px'
+            }}
+          />
+          <button
+            className={`w-1/4 text-xs leading-6 transition-colors duration-300 ${
+              predictionType === 'home' ? 'text-[#f7e479]' : 'text-secondary hover:text-[#f7e479]'
+            }`}
+            onClick={() => handlePredictionChange('home')}
+          >
+            Home
+          </button>
+          <button
+            className={`w-1/4 text-xs leading-6 transition-colors duration-300 ${
+              predictionType === 'draw' ? 'text-[#f7e479]' : 'text-secondary hover:text-[#f7e479]'
+            }`}
+            onClick={() => handlePredictionChange('draw')}
+          >
+            Draw
+          </button>
+          <button
+            className={`w-1/4 text-xs leading-6 transition-colors duration-300 ${
+              predictionType === 'away' ? 'text-[#f7e479]' : 'text-secondary hover:text-[#f7e479]'
+            }`}
+            onClick={() => handlePredictionChange('away')}
+          >
+            Away
+          </button>
+          <button
+            className={`w-1/4 text-xs leading-6 transition-colors duration-300 ${
+              predictionType === 'custom' ? 'text-[#f7e479]' : 'text-secondary hover:text-[#f7e479]'
+            }`}
+            onClick={() => handlePredictionChange('custom')}
+          >
+            Custom
+          </button>
         </div>
       </div>
-
-      <div className="flex justify-center space-x-4 mb-4">
-        <button
-          className={`px-4 py-2 rounded-full transition-colors ${
-            predictionType === 'home'
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-          onClick={() => handlePredictionChange('home')}
-        >
-          Home Win
-        </button>
-        <button
-          className={`px-4 py-2 rounded-full transition-colors ${
-            predictionType === 'draw'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-          onClick={() => handlePredictionChange('draw')}
-        >
-          Draw
-        </button>
-        <button
-          className={`px-4 py-2 rounded-full transition-colors ${
-            predictionType === 'away'
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-          onClick={() => handlePredictionChange('away')}
-        >
-          Away Win
-        </button>
-        <button
-          className={`px-4 py-2 rounded-full transition-colors ${
-            predictionType === 'custom'
-              ? 'bg-purple-500 text-white'
-              : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-          onClick={() => handlePredictionChange('custom')}
-        >
-          Custom
-        </button>
-      </div>
-
-      {predictionType === 'custom' && (
-        <div className="flex items-center justify-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium">Home</span>
-            <div className="flex items-center">
-              <button
-                className="px-2 py-1 bg-gray-100 rounded-l hover:bg-gray-200"
-                onClick={() => handleScoreChange('home', homeGoals - 1)}
-              >
-                -
-              </button>
-              <input
-                type="number"
-                min="0"
-                value={homeGoals}
-                onChange={(e) => handleScoreChange('home', parseInt(e.target.value) || 0)}
-                className="w-12 text-center border-y border-gray-200"
-              />
-              <button
-                className="px-2 py-1 bg-gray-100 rounded-r hover:bg-gray-200"
-                onClick={() => handleScoreChange('home', homeGoals + 1)}
-              >
-                +
-              </button>
-            </div>
-          </div>
-          <span className="text-xl font-bold">:</span>
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center">
-              <button
-                className="px-2 py-1 bg-gray-100 rounded-l hover:bg-gray-200"
-                onClick={() => handleScoreChange('away', awayGoals - 1)}
-              >
-                -
-              </button>
-              <input
-                type="number"
-                min="0"
-                value={awayGoals}
-                onChange={(e) => handleScoreChange('away', parseInt(e.target.value) || 0)}
-                className="w-12 text-center border-y border-gray-200"
-              />
-              <button
-                className="px-2 py-1 bg-gray-100 rounded-r hover:bg-gray-200"
-                onClick={() => handleScoreChange('away', awayGoals + 1)}
-              >
-                +
-              </button>
-            </div>
-            <span className="text-sm font-medium">Away</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 } 

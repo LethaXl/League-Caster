@@ -244,14 +244,14 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="min-h-screen p-8 bg-gray-50">
+      <div className="min-h-screen p-8 bg-background">
         <div className="max-w-7xl mx-auto">
-          <div className="bg-white shadow rounded-lg p-6 text-center">
-            <h3 className="text-xl font-medium text-red-600">Error</h3>
-            <p className="mt-2 text-gray-600">{error}</p>
+          <div className="bg-card rounded-lg p-6 text-center">
+            <h3 className="text-xl font-medium text-red-400">Error</h3>
+            <p className="mt-2 text-secondary">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+              className="mt-4 px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
             >
               Retry
             </button>
@@ -263,11 +263,11 @@ export default function Home() {
 
   if (!selectedLeague) {
     return (
-      <main className="min-h-screen p-8 bg-gray-50">
+      <main className="min-h-screen p-8 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">League Caster</h1>
-            <p className="text-xl text-gray-600">Select a league to view standings and make predictions</p>
+            <h1 className="text-4xl font-bold text-primary mb-4">League Caster</h1>
+            <p className="text-xl text-secondary">Select a league to view standings and make predictions</p>
           </div>
           <LeagueSelector onLeagueSelect={setSelectedLeague} />
         </div>
@@ -277,14 +277,14 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 bg-gray-50">
+      <div className="min-h-screen p-8 bg-background">
         <div className="max-w-7xl mx-auto">
-          <div className="bg-white shadow rounded-lg p-6">
+          <div className="bg-card rounded-lg p-6">
             <div className="animate-pulse space-y-4">
-              <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+              <div className="h-8 bg-card-border rounded w-1/4"></div>
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded"></div>
+                  <div key={i} className="h-4 bg-card-border rounded"></div>
                 ))}
               </div>
             </div>
@@ -295,11 +295,11 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
+    <main className="min-h-screen p-8 bg-background">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">League Standings</h1>
+            <h1 className="text-4xl font-bold text-primary">League Standings</h1>
             <button
               onClick={() => {
                 setSelectedLeague(null);
@@ -307,7 +307,7 @@ export default function Home() {
                 setIsViewingStandings(false);
                 setViewingFromMatchday(null);
               }}
-              className="mt-2 text-blue-600 hover:text-blue-800"
+              className="mt-2 text-accent hover:text-accent-hover"
             >
               ← Back to leagues
             </button>
@@ -315,16 +315,16 @@ export default function Home() {
         </div>
 
         {!showPredictions || isViewingStandings ? (
-          <div className="bg-white shadow rounded-lg">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-card rounded-lg">
+            <div className="p-6 border-b border-card-border">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">
+                  <h2 className="text-xl font-semibold text-primary">
                     {isViewingStandings && viewingFromMatchday ? 'Current Standings' :
                      isViewingStandings && isFinalMatchday ? 'Final Predicted Standings' : 
                      isViewingStandings ? 'Predicted Standings' : 'Current Standings'}
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-secondary">
                     {selectedLeague === 'PL' ? 'Premier League' : 
                      selectedLeague === 'BL1' ? 'Bundesliga' :
                      selectedLeague === 'FL1' ? 'Ligue 1' :
@@ -357,7 +357,7 @@ export default function Home() {
                         setShowPredictions(true);
                         setViewingFromMatchday(null);
                       }}
-                      className="px-6 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-colors"
+                      className="px-6 py-2 bg-card-border text-secondary rounded-full hover:bg-card transition-colors"
                     >
                       Back to Predictions
                     </button>
@@ -365,7 +365,7 @@ export default function Home() {
                   {!isViewingStandings && (
                     <button
                       onClick={handleStartPredictions}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+                      className="px-6 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
                     >
                       Start Predictions
                     </button>
@@ -380,7 +380,7 @@ export default function Home() {
             />
           </div>
         ) : (
-          <div className="bg-white shadow rounded-lg p-6">
+          <div className="bg-card rounded-lg p-6">
             <PredictionForm
               leagueCode={selectedLeague}
               initialStandings={standings}

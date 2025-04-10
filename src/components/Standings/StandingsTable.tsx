@@ -22,7 +22,7 @@ function PositionChangeIndicator({ change }: { change: number | null }) {
   if (change === null || change === 0) return null;
 
   const isPositive = change > 0;
-  const color = isPositive ? 'text-green-600' : 'text-red-600';
+  const color = isPositive ? 'text-green-400' : 'text-red-400';
   const arrow = isPositive ? '↑' : '↓';
   
   return (
@@ -37,7 +37,7 @@ export default function StandingsTable({ standings, initialStandings, loading }:
     return (
       <div className="animate-pulse space-y-4">
         {[...Array(20)].map((_, i) => (
-          <div key={i} className="h-12 bg-gray-200 rounded"></div>
+          <div key={i} className="h-12 bg-card-border rounded"></div>
         ))}
       </div>
     );
@@ -48,26 +48,26 @@ export default function StandingsTable({ standings, initialStandings, loading }:
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-card-border">
+        <thead className="bg-card-border">
           <tr>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pos</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">P</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">W</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">D</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">L</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">GD</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pts</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">Pos</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Team</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">P</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">W</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">D</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">L</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">GD</th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">Pts</th>
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-card divide-y divide-card-border">
           {sortedStandings.map((standing) => {
             const positionChange = getPositionChange(standing, initialStandings);
             
             return (
-              <tr key={standing.team.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 relative">
+              <tr key={standing.team.id} className="hover:bg-card-border">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary relative">
                   <div className="flex items-center justify-center">
                     <span>{standing.position}</span>
                     <PositionChangeIndicator change={positionChange} />
@@ -84,18 +84,18 @@ export default function StandingsTable({ standings, initialStandings, loading }:
                       />
                     </div>
                     <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{standing.team.name}</div>
+                      <div className="text-sm font-medium text-primary">{standing.team.name}</div>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{standing.playedGames}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{standing.won}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{standing.draw}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{standing.lost}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.playedGames}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.won}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.draw}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.lost}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">
                   {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-center">{standing.points}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-primary text-center">{standing.points}</td>
               </tr>
             );
           })}

@@ -379,7 +379,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     return (
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="animate-pulse bg-gray-200 h-32 rounded-lg"></div>
+          <div key={i} className="animate-pulse bg-card-border h-32 rounded-lg"></div>
         ))}
       </div>
     );
@@ -388,11 +388,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (error) {
     return (
       <div className="text-center py-8">
-        <h3 className="text-xl font-medium text-red-600">Error</h3>
-        <p className="mt-2 text-gray-600">{error}</p>
+        <h3 className="text-xl font-medium text-red-400">Error</h3>
+        <p className="mt-2 text-secondary">{error}</p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+          className="mt-4 px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
         >
           Retry
         </button>
@@ -403,30 +403,28 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (matches.length === 0) {
     return (
       <div className="text-center py-8">
-        <h3 className="text-xl font-medium text-gray-900">No Matches Available</h3>
-        <p className="mt-2 text-gray-600">There are no scheduled matches for matchday {currentMatchday}.</p>
+        <h3 className="text-xl font-medium text-primary">No Matches Available</h3>
+        <p className="mt-2 text-secondary">There are no scheduled matches for matchday {currentMatchday}.</p>
         <div className="flex flex-col gap-3 mt-4 items-center">
           {!isCheckingMatchdays && (
             <button
               onClick={() => {
                 setIsCheckingMatchdays(true);
-                findNextAvailableMatchday(currentMatchday);
+                setCurrentMatchday(currentMatchday + 1);
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
             >
               Find Next Available Matchday
             </button>
           )}
           <button
             onClick={() => {
-              // Reset completed matchdays for this league
               const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
               completedMatchdays[leagueCode] = [];
               localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
-              // Reload the page
               window.location.reload();
             }}
-            className="px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
+            className="px-4 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
           >
             Reset Progress (Fix Issues)
           </button>
@@ -436,42 +434,58 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Matchday {currentMatchday} Predictions</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Make your predictions for each match
-          </p>
-        </div>
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={handleViewStandings}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-          >
-            View Current Standings
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
-          >
-            Submit Predictions
-          </button>
-        </div>
+    <div className="space-y-4">
+      <div className="flex justify-center items-center mb-6">
+        <h2 className="text-2xl font-bold text-primary">Matchday {currentMatchday} Fixtures</h2>
       </div>
 
-      <div className="space-y-4">
-        {matches.map(match => (
-          <MatchPrediction
-            key={match.id}
-            match={match}
-            onPredictionChange={handlePredictionChange}
-          />
-        ))}
+      {/* First row - center if only one match */}
+      <div className={`grid grid-cols-5 gap-4 ${matches.length === 1 ? 'justify-items-center' : ''}`}>
+        {matches.length === 1 ? (
+          <div className="col-start-3">
+            <MatchPrediction
+              key={matches[0].id}
+              match={matches[0]}
+              onPredictionChange={handlePredictionChange}
+            />
+          </div>
+        ) : (
+          matches.slice(0, 5).map(match => (
+            <MatchPrediction
+              key={match.id}
+              match={match}
+              onPredictionChange={handlePredictionChange}
+            />
+          ))
+        )}
       </div>
 
-      <div className="text-sm text-gray-500 text-center pt-4 border-t border-gray-200">
-        Matchday {currentMatchday} of {MAX_MATCHDAY}
+      {/* Second row */}
+      {matches.length > 5 && (
+        <div className={`grid ${matches.length === 9 ? 'grid-cols-4 ml-[0%]' : 'grid-cols-5'} gap-4`}>
+          {matches.slice(5).map(match => (
+            <MatchPrediction
+              key={match.id}
+              match={match}
+              onPredictionChange={handlePredictionChange}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-center space-x-4 mt-8">
+        <button
+          onClick={handleSubmit}
+          className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+        >
+          Submit Predictions
+        </button>
+        <button
+          onClick={handleViewStandings}
+          className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+        >
+          View Standings
+        </button>
       </div>
     </div>
   );
