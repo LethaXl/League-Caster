@@ -53,28 +53,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         return; // Skip if we're already checking this matchday
       }
       
-      // Check if this matchday has been completed
+      // Get both completed matchdays and matches
       const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+      const completedMatches = JSON.parse(localStorage.getItem('completedMatches') || '{}');
       const isCompleted = completedMatchdays[leagueCode]?.includes(matchday);
-      
-      // If this matchday is completed, find the next uncompleted matchday
-      if (isCompleted && !isCheckingMatchdays) {
-        setIsCheckingMatchdays(true);
-        // Find the next uncompleted matchday
-        let nextUncompleted = matchday;
-        const completed = completedMatchdays[leagueCode] || [];
-        
-        while (completed.includes(nextUncompleted) && nextUncompleted <= MAX_MATCHDAY) {
-          nextUncompleted++;
-        }
-        
-        if (nextUncompleted <= MAX_MATCHDAY) {
-          setCurrentMatchday(nextUncompleted);
-          setIsCheckingMatchdays(false);
-          return;
-        }
-        // If all matchdays are completed, continue with the current one
-      }
       
       setLoading(true);
       setError(null);
@@ -83,26 +65,59 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       try {
         // Use initialMatches if available on first render
         if (initialMatches.length > 0 && !matchdayCache.current.has(matchday)) {
-          setMatches(initialMatches);
-          matchdayCache.current.set(matchday, initialMatches);
-          
-          // Initialize predictions with draws
-          const initialPredictions = new Map<number, Prediction>();
-          initialMatches.forEach(match => {
-            initialPredictions.set(match.id, {
-              matchId: match.id,
-              type: 'draw'
+          // Filter out already predicted matches
+          const unpredictedMatches = initialMatches.filter(
+            match => !completedMatches[leagueCode]?.includes(match.id)
+          );
+          if (unpredictedMatches.length > 0) {
+            setMatches(unpredictedMatches);
+            matchdayCache.current.set(matchday, unpredictedMatches);
+            
+            // Initialize predictions with draws
+            const initialPredictions = new Map<number, Prediction>();
+            unpredictedMatches.forEach(match => {
+              initialPredictions.set(match.id, {
+                matchId: match.id,
+                type: 'draw'
+              });
             });
-          });
-          setPredictions(initialPredictions);
+            setPredictions(initialPredictions);
+            
+            // Initialize standings if needed
+            if (predictedStandings.length === 0) {
+              const deepCopyStandings = initialStandings.map(standing => ({
+                ...standing,
+                team: { ...standing.team }
+              }));
+              setPredictedStandings(deepCopyStandings);
+            }
+            
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Check if this matchday is completed
+        const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+        const isCompleted = completedMatchdays[leagueCode]?.includes(matchday);
+        
+        // If this matchday is completed, find the next uncompleted matchday
+        if (isCompleted && !isCheckingMatchdays) {
+          setIsCheckingMatchdays(true);
+          // Find the next uncompleted matchday
+          let nextUncompleted = matchday;
+          const completed = completedMatchdays[leagueCode] || [];
           
-          // Initialize standings if needed
-          if (predictedStandings.length === 0) {
-            setPredictedStandings(initialStandings);
+          while (completed.includes(nextUncompleted) && nextUncompleted <= MAX_MATCHDAY) {
+            nextUncompleted++;
           }
           
-          setLoading(false);
-          return;
+          if (nextUncompleted <= MAX_MATCHDAY) {
+            setCurrentMatchday(nextUncompleted);
+            setIsCheckingMatchdays(false);
+            return;
+          }
+          // If all matchdays are completed, continue with the current one
         }
         
         // Check if we have cached data for this matchday
@@ -123,7 +138,12 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             
             // Initialize standings if needed
             if (predictedStandings.length === 0) {
-              setPredictedStandings(initialStandings);
+              // Make a deep copy of initial standings to preserve all team information
+              const deepCopyStandings = initialStandings.map(standing => ({
+                ...standing,
+                team: { ...standing.team }
+              }));
+              setPredictedStandings(deepCopyStandings);
             }
             
             setLoading(false);
@@ -158,7 +178,12 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
           // Initialize standings if needed
           if (predictedStandings.length === 0) {
-            setPredictedStandings(initialStandings);
+            // Make a deep copy of initial standings to preserve all team information
+            const deepCopyStandings = initialStandings.map(standing => ({
+              ...standing,
+              team: { ...standing.team }
+            }));
+            setPredictedStandings(deepCopyStandings);
           }
         }
         
@@ -235,10 +260,27 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const handleSubmit = async () => {
     let updatedStandings = [...predictedStandings];
 
-    // Store the current matchday as completed
+    // Store both completed matchday and completed match IDs
     const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+    const completedMatches = JSON.parse(localStorage.getItem('completedMatches') || '{}');
+    
+    if (!completedMatches[leagueCode]) {
+      completedMatches[leagueCode] = [];
+    }
+    
+    // Add current match IDs to completed matches
+    matches.forEach(match => {
+      if (!completedMatches[leagueCode].includes(match.id)) {
+        completedMatches[leagueCode].push(match.id);
+      }
+    });
+    
+    // Update completed matchdays
     completedMatchdays[leagueCode] = [...(completedMatchdays[leagueCode] || []), currentMatchday];
+    
+    // Save both to localStorage
     localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
+    localStorage.setItem('completedMatches', JSON.stringify(completedMatches));
 
     matches.forEach(match => {
       const prediction = predictions.get(match.id);
@@ -284,8 +326,13 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Check cache first
       if (matchdayCache.current.has(nextMatchday)) {
         const cachedMatches = matchdayCache.current.get(nextMatchday)!;
-        if (cachedMatches.length > 0) {
+        // Only show matches that haven't been predicted yet
+        const unpredictedMatches = cachedMatches.filter(
+          match => !completedMatches[leagueCode]?.includes(match.id)
+        );
+        if (unpredictedMatches.length > 0) {
           setCurrentMatchday(nextMatchday);
+          setMatches(unpredictedMatches);
           setLoading(false);
           foundNextMatchday = true;
           return;
@@ -295,10 +342,15 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         try {
           checkedMatchdays.current.add(nextMatchday);
           const matchData = await getMatches(leagueCode, nextMatchday);
-          matchdayCache.current.set(nextMatchday, matchData);
+          // Only store and show matches that haven't been predicted yet
+          const unpredictedMatches = matchData.filter(
+            match => !completedMatches[leagueCode]?.includes(match.id)
+          );
+          matchdayCache.current.set(nextMatchday, unpredictedMatches);
           
-          if (matchData.length > 0) {
+          if (unpredictedMatches.length > 0) {
             setCurrentMatchday(nextMatchday);
+            setMatches(unpredictedMatches);
             setLoading(false);
             foundNextMatchday = true;
             return;

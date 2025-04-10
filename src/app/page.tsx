@@ -338,9 +338,21 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="flex space-x-4">
-                  {isViewingStandings && !isFinalMatchday && !loading && (
+                  {isViewingStandings && !loading && viewingFromMatchday && (
                     <button
                       onClick={() => {
+                        // Get completed matchdays
+                        const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+                        const currentCompleted = completedMatchdays[selectedLeague] || [];
+                        
+                        // Find the next uncompleted matchday
+                        let nextMatchday = currentMatchday;
+                        while (currentCompleted.includes(nextMatchday) && nextMatchday <= maxMatchday) {
+                          nextMatchday++;
+                        }
+                        
+                        // Update the current matchday before showing predictions
+                        setCurrentMatchday(nextMatchday);
                         setIsViewingStandings(false);
                         setShowPredictions(true);
                         setViewingFromMatchday(null);
@@ -362,7 +374,8 @@ export default function Home() {
               </div>
             </div>
             <StandingsTable 
-              standings={isViewingStandings && !viewingFromMatchday ? predictedStandings : standings} 
+              standings={isViewingStandings && !viewingFromMatchday ? predictedStandings : viewingFromMatchday ? predictedStandings : standings} 
+              initialStandings={isViewingStandings || viewingFromMatchday ? standings : undefined}
               loading={false} 
             />
           </div>
