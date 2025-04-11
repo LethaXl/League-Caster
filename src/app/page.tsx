@@ -316,7 +316,7 @@ export default function Home() {
 
         {!showPredictions || isViewingStandings ? (
           <div className="bg-card rounded-lg">
-            <div className="p-6 border-b border-card-border">
+            <div className="p-6">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-primary">

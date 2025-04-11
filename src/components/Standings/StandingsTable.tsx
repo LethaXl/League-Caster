@@ -87,32 +87,35 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   const sortedStandings = [...standings].sort((a, b) => a.position - b.position);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-card-border">
-        <thead className="bg-card-border">
+    <div className="overflow-x-auto rounded-lg">
+      <table className="min-w-full">
+        <thead>
           <tr>
-            <th className="px-6 py-3 text-xs font-medium text-secondary uppercase tracking-wider w-24">
+            <th className="px-6 py-4 text-xs font-semibold text-secondary uppercase tracking-wider w-24 border-b border-card-border/50">
               <div className="flex">
                 <span className="w-8 text-center">Pos</span>
                 <span className="w-10"></span>
               </div>
             </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Team</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">P</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">W</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">D</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">L</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">GD</th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">Pts</th>
+            <th className="px-6 py-4 text-left text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Team</th>
+            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">P</th>
+            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">W</th>
+            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">D</th>
+            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">L</th>
+            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">GD</th>
+            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Pts</th>
           </tr>
         </thead>
-        <tbody className="bg-card divide-y divide-card-border">
-          {sortedStandings.map((standing) => {
+        <tbody>
+          {sortedStandings.map((standing, index) => {
             const positionChange = getPositionChange(standing, initialStandings);
             const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
             
             return (
-              <tr key={standing.team.id} className="hover:bg-card-border">
+              <tr 
+                key={standing.team.id} 
+                className={`${index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} hover:bg-black/5 transition-colors duration-75`}
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-primary w-24">
                   <div className="flex">
                     <span className="w-8 text-center">{standing.position}</span>
