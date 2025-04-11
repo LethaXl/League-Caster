@@ -3,6 +3,7 @@ export interface League {
   name: string;
   country: string;
   flag: string;
+  image: string;
 }
 
 export interface Standing {
