@@ -377,6 +377,7 @@ export default function Home() {
               standings={isViewingStandings && !viewingFromMatchday ? predictedStandings : viewingFromMatchday ? predictedStandings : standings} 
               initialStandings={isViewingStandings || viewingFromMatchday ? standings : undefined}
               loading={false} 
+              leagueCode={selectedLeague || undefined}
             />
           </div>
         ) : (

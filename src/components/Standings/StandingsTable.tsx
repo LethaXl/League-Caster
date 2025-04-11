@@ -3,8 +3,9 @@ import Image from 'next/image';
 
 interface StandingsTableProps {
   standings: Standing[];
-  initialStandings?: Standing[];  // Add initialStandings prop
+  initialStandings?: Standing[];
   loading: boolean;
+  leagueCode?: string;
 }
 
 // Helper function to get position change
@@ -17,6 +18,30 @@ function getPositionChange(team: Standing, initialStandings?: Standing[]) {
   return initialPosition - team.position;
 }
 
+// Helper function to determine European competition qualification
+function getEuropeanCompetition(position: number, leagueCode?: string) {
+  if (!leagueCode) return null;
+  
+  // Check league code and position to return the appropriate logo
+  switch(leagueCode) {
+    case 'PL': // Premier League (England)
+      if (position <= 5) return 'ucl_logo.png';
+      if (position === 6) return 'uel_logo.png';
+      if (position === 7) return 'uecl_logo.png';
+      return null;
+    case 'PD': // La Liga (Spain)
+    case 'SA': // Serie A (Italy)
+    case 'BL1': // Bundesliga (Germany)
+    case 'FL1': // Ligue 1 (France)
+      if (position <= 4) return 'ucl_logo.png';
+      if (position === 5) return 'uel_logo.png';
+      if (position === 6) return 'uecl_logo.png';
+      return null;
+    default:
+      return null;
+  }
+}
+
 // Helper component for position change indicator
 function PositionChangeIndicator({ change }: { change: number | null }) {
   if (change === null || change === 0) return null;
@@ -26,13 +51,28 @@ function PositionChangeIndicator({ change }: { change: number | null }) {
   const arrow = isPositive ? '↑' : '↓';
   
   return (
-    <span className={`${color} absolute right-2`}>
+    <span className={`${color} ml-2`}>
       {arrow} {Math.abs(change)}
     </span>
   );
 }
 
-export default function StandingsTable({ standings, initialStandings, loading }: StandingsTableProps) {
+// Helper component for competition logo
+function CompetitionLogo({ logo }: { logo: string | null }) {
+  if (!logo) return null;
+  
+  return (
+    <Image
+      src={`/${logo}`}
+      alt="European competition"
+      width={18}
+      height={18}
+      className="object-contain"
+    />
+  );
+}
+
+export default function StandingsTable({ standings, initialStandings, loading, leagueCode }: StandingsTableProps) {
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
@@ -51,7 +91,12 @@ export default function StandingsTable({ standings, initialStandings, loading }:
       <table className="min-w-full divide-y divide-card-border">
         <thead className="bg-card-border">
           <tr>
-            <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">Pos</th>
+            <th className="px-6 py-3 text-xs font-medium text-secondary uppercase tracking-wider w-24">
+              <div className="flex">
+                <span className="w-8 text-center">Pos</span>
+                <span className="w-10"></span>
+              </div>
+            </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wider">Team</th>
             <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">P</th>
             <th className="px-6 py-3 text-center text-xs font-medium text-secondary uppercase tracking-wider">W</th>
@@ -64,13 +109,17 @@ export default function StandingsTable({ standings, initialStandings, loading }:
         <tbody className="bg-card divide-y divide-card-border">
           {sortedStandings.map((standing) => {
             const positionChange = getPositionChange(standing, initialStandings);
+            const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
             
             return (
               <tr key={standing.team.id} className="hover:bg-card-border">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary relative">
-                  <div className="flex items-center justify-center">
-                    <span>{standing.position}</span>
-                    <PositionChangeIndicator change={positionChange} />
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary w-24">
+                  <div className="flex">
+                    <span className="w-8 text-center">{standing.position}</span>
+                    <span className="w-10 flex items-center">
+                      {euroCompetition && <CompetitionLogo logo={euroCompetition} />}
+                      <PositionChangeIndicator change={positionChange} />
+                    </span>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
