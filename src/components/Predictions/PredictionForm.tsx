@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Match, Prediction, PredictionType } from '@/types/predictions';
 import { getMatches, processMatchPrediction, updateStandings } from '@/services/football-api';
 import MatchPrediction from './MatchPrediction';
@@ -46,199 +46,167 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const matchdayCache = useRef<Map<number, Match[]>>(new Map());
   // Keep track of matchdays we've already checked to avoid duplicate API calls
   const checkedMatchdays = useRef<Set<number>>(new Set());
+  // Keep track of ongoing API calls
+  const pendingRequests = useRef<Map<number, Promise<Match[]>>>(new Map());
 
+  // Load cached data from localStorage on mount
   useEffect(() => {
-    const fetchMatches = async (matchday: number) => {
-      if (loading && checkedMatchdays.current.has(matchday)) {
-        return; // Skip if we're already checking this matchday
-      }
-      
-      // Get both completed matchdays and matches
-      const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
-      const completedMatches = JSON.parse(localStorage.getItem('completedMatches') || '{}');
-      const isCompleted = completedMatchdays[leagueCode]?.includes(matchday);
-      
-      setLoading(true);
-      setError(null);
-      checkedMatchdays.current.add(matchday);
-      
-      try {
-        // Use initialMatches if available on first render
-        if (initialMatches.length > 0 && !matchdayCache.current.has(matchday)) {
-          // Filter out already predicted matches
-          const unpredictedMatches = initialMatches.filter(
-            match => !completedMatches[leagueCode]?.includes(match.id)
-          );
-          if (unpredictedMatches.length > 0) {
-            setMatches(unpredictedMatches);
-            matchdayCache.current.set(matchday, unpredictedMatches);
-            
-            // Initialize predictions with draws
-            const initialPredictions = new Map<number, Prediction>();
-            unpredictedMatches.forEach(match => {
-              initialPredictions.set(match.id, {
-                matchId: match.id,
-                type: 'draw'
-              });
-            });
-            setPredictions(initialPredictions);
-            
-            // Initialize standings if needed
-            if (predictedStandings.length === 0) {
-              const deepCopyStandings = initialStandings.map(standing => ({
-                ...standing,
-                team: { ...standing.team }
-              }));
-              setPredictedStandings(deepCopyStandings);
-            }
-            
-            setLoading(false);
-            return;
-          }
-        }
+    const savedCache = localStorage.getItem(`matchdayCache_${leagueCode}`);
+    if (savedCache) {
+      const parsedCache = JSON.parse(savedCache);
+      matchdayCache.current = new Map(Object.entries(parsedCache).map(([key, value]) => [parseInt(key), value as Match[]]));
+    }
+  }, [leagueCode]);
+
+  // Save cache to localStorage whenever it changes
+  const saveCache = useCallback(() => {
+    const cacheObj = Object.fromEntries(matchdayCache.current.entries());
+    localStorage.setItem(`matchdayCache_${leagueCode}`, JSON.stringify(cacheObj));
+  }, [leagueCode]);
+
+  const fetchMatches = async (matchday: number) => {
+    // Skip matchdays 27-30 for LaLiga
+    if (leagueCode === 'PD' && matchday >= 27 && matchday <= 30) {
+      // Move to matchday 31 if we're in the skipped range
+      setCurrentMatchday(31);
+      return;
+    }
+
+    // Only skip if we've already checked this matchday
+    if (checkedMatchdays.current.has(matchday)) {
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    checkedMatchdays.current.add(matchday);
+    
+    try {
+      // Use initialMatches if available on first render
+      if (initialMatches.length > 0 && !matchdayCache.current.has(matchday)) {
+        // Filter out already predicted matches
+        const completedMatches = JSON.parse(localStorage.getItem('completedMatches') || '{}');
+        const unpredictedMatches = initialMatches.filter(
+          match => !completedMatches[leagueCode]?.includes(match.id)
+        );
         
-        // Check if this matchday is completed
-        const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
-        const isCompleted = completedMatchdays[leagueCode]?.includes(matchday);
-        
-        // If this matchday is completed, find the next uncompleted matchday
-        if (isCompleted && !isCheckingMatchdays) {
-          setIsCheckingMatchdays(true);
-          // Find the next uncompleted matchday
-          let nextUncompleted = matchday;
-          const completed = completedMatchdays[leagueCode] || [];
+        if (unpredictedMatches.length > 0) {
+          setMatches(unpredictedMatches);
+          matchdayCache.current.set(matchday, unpredictedMatches);
+          saveCache();
           
-          while (completed.includes(nextUncompleted) && nextUncompleted <= MAX_MATCHDAY) {
-            nextUncompleted++;
-          }
-          
-          if (nextUncompleted <= MAX_MATCHDAY) {
-            setCurrentMatchday(nextUncompleted);
-            setIsCheckingMatchdays(false);
-            return;
-          }
-          // If all matchdays are completed, continue with the current one
-        }
-        
-        // Check if we have cached data for this matchday
-        if (matchdayCache.current.has(matchday)) {
-          const cachedData = matchdayCache.current.get(matchday)!;
-          setMatches(cachedData);
-          
-          // Initialize predictions if we have matches
-          if (cachedData.length > 0) {
-            const initialPredictions = new Map<number, Prediction>();
-            cachedData.forEach(match => {
-              initialPredictions.set(match.id, {
-                matchId: match.id,
-                type: 'draw'
-              });
-            });
-            setPredictions(initialPredictions);
-            
-            // Initialize standings if needed
-            if (predictedStandings.length === 0) {
-              // Make a deep copy of initial standings to preserve all team information
-              const deepCopyStandings = initialStandings.map(standing => ({
-                ...standing,
-                team: { ...standing.team }
-              }));
-              setPredictedStandings(deepCopyStandings);
-            }
-            
-            setLoading(false);
-            return;
-          }
-        }
-        
-        // Fetch from API if not cached
-        const matchData = await getMatches(leagueCode, matchday);
-        // Cache the result
-        matchdayCache.current.set(matchday, matchData);
-        
-        // If no matches available for this matchday, try to find the next available matchday
-        if (matchData.length === 0 && !isCheckingMatchdays && matchday < MAX_MATCHDAY) {
-          setIsCheckingMatchdays(true);
-          findNextAvailableMatchday(matchday);
-          return;
-        }
-        
-        setMatches(matchData);
-        
-        // Initialize predictions with draws
-        if (matchData.length > 0) {
+          // Initialize predictions with draws
           const initialPredictions = new Map<number, Prediction>();
-          matchData.forEach(match => {
+          unpredictedMatches.forEach(match => {
             initialPredictions.set(match.id, {
               matchId: match.id,
               type: 'draw'
             });
           });
           setPredictions(initialPredictions);
-
+          
           // Initialize standings if needed
           if (predictedStandings.length === 0) {
-            // Make a deep copy of initial standings to preserve all team information
             const deepCopyStandings = initialStandings.map(standing => ({
               ...standing,
               team: { ...standing.team }
             }));
             setPredictedStandings(deepCopyStandings);
           }
-        }
-        
-        setIsCheckingMatchdays(false);
-      } catch (error: any) {
-        console.error('Error fetching matches:', error);
-        setError(error.response?.data?.error || 'Failed to fetch matches. Please try again later.');
-        setIsCheckingMatchdays(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const findNextAvailableMatchday = async (startMatchday: number) => {
-      // Use a more efficient approach with fewer API calls
-      // First, try the next few matchdays (most likely to have matches)
-      const nextFewMatchdays = [
-        startMatchday + 1,
-        startMatchday + 2,
-        startMatchday - 1
-      ].filter(md => md >= 1 && md <= MAX_MATCHDAY);
-      
-      for (const md of nextFewMatchdays) {
-        if (checkedMatchdays.current.has(md)) {
-          const cachedData = matchdayCache.current.get(md);
-          if (cachedData && cachedData.length > 0) {
-            setCurrentMatchday(md);
-            return;
-          }
-          continue; // Skip if already checked and no matches
-        }
-        
-        try {
-          checkedMatchdays.current.add(md);
-          const matchData = await getMatches(leagueCode, md);
-          matchdayCache.current.set(md, matchData);
           
-          if (matchData.length > 0) {
-            // Found a matchday with matches
-            setCurrentMatchday(md);
-            return;
-          }
-        } catch (error) {
-          console.error(`Error checking matchday ${md}:`, error);
+          setLoading(false);
+          return;
         }
       }
       
-      // If still no matches found, we won't check every single matchday
-      // Just show the no matches UI for the current matchday
-      setIsCheckingMatchdays(false);
+      // Check if we have cached data for this matchday
+      if (matchdayCache.current.has(matchday)) {
+        const cachedData = matchdayCache.current.get(matchday)!;
+        if (cachedData.length > 0) {
+          setMatches(cachedData);
+          
+          // Initialize predictions if we have matches
+          const initialPredictions = new Map<number, Prediction>();
+          cachedData.forEach(match => {
+            initialPredictions.set(match.id, {
+              matchId: match.id,
+              type: 'draw'
+            });
+          });
+          setPredictions(initialPredictions);
+          
+          // Initialize standings if needed
+          if (predictedStandings.length === 0) {
+            const deepCopyStandings = initialStandings.map(standing => ({
+              ...standing,
+              team: { ...standing.team }
+            }));
+            setPredictedStandings(deepCopyStandings);
+          }
+          
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Check if there's already a pending request for this matchday
+      if (pendingRequests.current.has(matchday)) {
+        const matchData = await pendingRequests.current.get(matchday);
+        return;
+      }
+      
+      // Fetch from API if not cached
+      const request = getMatches(leagueCode, matchday);
+      pendingRequests.current.set(matchday, request);
+      
+      const matchData = await request;
+      pendingRequests.current.delete(matchday);
+      
+      matchdayCache.current.set(matchday, matchData);
+      saveCache();
+      
+      if (matchData.length === 0) {
+        // If no matches available, try the next matchday
+        if (matchday < MAX_MATCHDAY) {
+          setCurrentMatchday(matchday + 1);
+          return;
+        }
+      }
+      
+      setMatches(matchData);
+      
+      // Initialize predictions with draws
+      if (matchData.length > 0) {
+        const initialPredictions = new Map<number, Prediction>();
+        matchData.forEach(match => {
+          initialPredictions.set(match.id, {
+            matchId: match.id,
+            type: 'draw'
+          });
+        });
+        setPredictions(initialPredictions);
+        
+        // Initialize standings if needed
+        if (predictedStandings.length === 0) {
+          const deepCopyStandings = initialStandings.map(standing => ({
+            ...standing,
+            team: { ...standing.team }
+          }));
+          setPredictedStandings(deepCopyStandings);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching matches:', error);
+      setError(error.response?.data?.error || 'Failed to fetch matches. Please try again later.');
+      pendingRequests.current.delete(matchday);
+    } finally {
       setLoading(false);
-    };
+    }
+  };
 
+  useEffect(() => {
     fetchMatches(currentMatchday);
-  }, [leagueCode, currentMatchday, initialMatches, initialStandings, predictedStandings, setPredictedStandings]);
+  }, [leagueCode, currentMatchday]);
 
   const handlePredictionChange = (
     matchId: number,
@@ -282,6 +250,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
     localStorage.setItem('completedMatches', JSON.stringify(completedMatches));
 
+    // Process predictions and update standings
     matches.forEach(match => {
       const prediction = predictions.get(match.id);
       if (prediction) {
@@ -302,70 +271,89 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       return;
     }
     
-    // Find the next matchday with matches using cached data if possible
-    setLoading(true);
+    // Find the next uncompleted matchday
+    let nextMatchday = currentMatchday + 1;
+    const completed = completedMatchdays[leagueCode] || [];
     
-    // Try more matchdays to handle gaps from cancelled matches
-    let foundNextMatchday = false;
+    // Skip completed matchdays and matchdays 27-30 for LaLiga
+    while ((completed.includes(nextMatchday) || (leagueCode === 'PD' && nextMatchday >= 27 && nextMatchday <= 30)) && nextMatchday <= MAX_MATCHDAY) {
+      nextMatchday++;
+    }
     
-    // Check up to 10 matchdays ahead to handle larger gaps
-    for (let offset = 1; offset <= 10; offset++) {
-      const nextMatchday = currentMatchday + offset;
-      if (nextMatchday > MAX_MATCHDAY) {
-        // If we've hit the last matchday, show the standings
-        setIsViewingStandings(true);
-        setLoading(false);
+    if (nextMatchday > MAX_MATCHDAY) {
+      setIsViewingStandings(true);
+      return;
+    }
+
+    // Check if we already have the next matchday's data in cache
+    if (matchdayCache.current.has(nextMatchday)) {
+      const cachedData = matchdayCache.current.get(nextMatchday)!;
+      if (cachedData.length > 0) {
+        setCurrentMatchday(nextMatchday);
+        setMatches(cachedData);
+        
+        // Initialize predictions with draws
+        const initialPredictions = new Map<number, Prediction>();
+        cachedData.forEach(match => {
+          initialPredictions.set(match.id, {
+            matchId: match.id,
+            type: 'draw'
+          });
+        });
+        setPredictions(initialPredictions);
         return;
       }
-      
-      // Skip if this matchday was already completed
-      if (completedMatchdays[leagueCode]?.includes(nextMatchday)) {
-        continue;
-      }
-      
-      // Check cache first
-      if (matchdayCache.current.has(nextMatchday)) {
-        const cachedMatches = matchdayCache.current.get(nextMatchday)!;
-        // Only show matches that haven't been predicted yet
-        const unpredictedMatches = cachedMatches.filter(
-          match => !completedMatches[leagueCode]?.includes(match.id)
-        );
-        if (unpredictedMatches.length > 0) {
-          setCurrentMatchday(nextMatchday);
-          setMatches(unpredictedMatches);
-          setLoading(false);
-          foundNextMatchday = true;
-          return;
-        }
-      } else if (!checkedMatchdays.current.has(nextMatchday)) {
-        // If not in cache and not checked yet, check it
-        try {
-          checkedMatchdays.current.add(nextMatchday);
-          const matchData = await getMatches(leagueCode, nextMatchday);
-          // Only store and show matches that haven't been predicted yet
-          const unpredictedMatches = matchData.filter(
-            match => !completedMatches[leagueCode]?.includes(match.id)
-          );
-          matchdayCache.current.set(nextMatchday, unpredictedMatches);
-          
-          if (unpredictedMatches.length > 0) {
-            setCurrentMatchday(nextMatchday);
-            setMatches(unpredictedMatches);
-            setLoading(false);
-            foundNextMatchday = true;
-            return;
-          }
-        } catch (error) {
-          console.error(`Error checking matchday ${nextMatchday}:`, error);
-        }
-      }
     }
     
-    // If not found in the checked matchdays, show the final standings
-    if (!foundNextMatchday) {
-      setIsViewingStandings(true);
+    // Set loading state
+    setLoading(true);
+    
+    try {
+      // Check if there's already a pending request
+      let matchData: Match[];
+      if (pendingRequests.current.has(nextMatchday)) {
+        const pendingData = await pendingRequests.current.get(nextMatchday);
+        if (!pendingData) {
+          throw new Error('Failed to fetch matches');
+        }
+        matchData = pendingData;
+      } else {
+        // Fetch matches for the next matchday
+        const request = getMatches(leagueCode, nextMatchday);
+        pendingRequests.current.set(nextMatchday, request);
+        matchData = await request;
+        pendingRequests.current.delete(nextMatchday);
+        
+        // Cache the result
+        matchdayCache.current.set(nextMatchday, matchData);
+        saveCache();
+      }
+      
+      if (matchData.length > 0) {
+        // Update the current matchday and matches
+        setCurrentMatchday(nextMatchday);
+        setMatches(matchData);
+        
+        // Initialize predictions with draws
+        const initialPredictions = new Map<number, Prediction>();
+        matchData.forEach(match => {
+          initialPredictions.set(match.id, {
+            matchId: match.id,
+            type: 'draw'
+          });
+        });
+        setPredictions(initialPredictions);
+      } else {
+        // If no matches found for this matchday, try the next one
+        setCurrentMatchday(nextMatchday + 1);
+      }
+    } catch (error) {
+      console.error('Error fetching next matchday:', error);
+      setError('Failed to fetch next matchday. Please try again.');
+      pendingRequests.current.delete(nextMatchday);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleViewStandings = () => {
@@ -378,8 +366,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (loading) {
     return (
       <div className="space-y-4">
+        <div className="flex justify-center items-center mb-6">
+          <h2 className="text-2xl font-bold text-primary">Loading Matchday {currentMatchday} Fixtures...</h2>
+        </div>
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="animate-pulse bg-card-border h-32 rounded-lg"></div>
+          <div key={i} className="animate-pulse bg-[#111111] h-32 rounded-lg border border-[#2a2a2a]"></div>
         ))}
       </div>
     );
@@ -391,7 +382,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         <h3 className="text-xl font-medium text-red-400">Error</h3>
         <p className="mt-2 text-secondary">{error}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            checkedMatchdays.current.clear();
+            matchdayCache.current.clear();
+            fetchMatches(currentMatchday);
+          }}
           className="mt-4 px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
         >
           Retry
@@ -406,7 +401,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         <h3 className="text-xl font-medium text-primary">No Matches Available</h3>
         <p className="mt-2 text-secondary">There are no scheduled matches for matchday {currentMatchday}.</p>
         <div className="flex flex-col gap-3 mt-4 items-center">
-          {!isCheckingMatchdays && (
+          {!isCheckingMatchdays && currentMatchday < MAX_MATCHDAY && (
             <button
               onClick={() => {
                 setIsCheckingMatchdays(true);
