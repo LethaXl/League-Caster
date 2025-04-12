@@ -68,10 +68,18 @@ export default function Home() {
   const fetchData = async () => {
     setLoading(true);
     setError(null);
+    
+    // Add a timeout to prevent infinite loading spinner
+    const timeoutId = setTimeout(() => {
+      setError('Request timed out. API may be rate limited. Please try again later.');
+      setLoading(false);
+    }, 15000); // 15 seconds timeout
+    
     try {
       // Make sure selectedLeague is not null
       if (!selectedLeague) {
         console.error("League not selected");
+        clearTimeout(timeoutId);
         return;
       }
 
@@ -87,6 +95,7 @@ export default function Home() {
         if (predictedStandings.length === 0) {
           setCurrentMatchday(currentMatchdayData);
         }
+        clearTimeout(timeoutId);
       } else {
         // Otherwise, use the combined endpoint to fetch both at once
         try {
@@ -102,8 +111,16 @@ export default function Home() {
           if (predictedStandings.length === 0) {
             setCurrentMatchday(currentMatchdayData);
           }
-        } catch (error) {
+          clearTimeout(timeoutId);
+        } catch (error: any) {
           console.error('Combined endpoint failed, falling back to separate requests:', error);
+          
+          // Check if rate limited (429)
+          if (error.response?.status === 429) {
+            clearTimeout(timeoutId);
+            setError(`API rate limit reached: ${error.response?.data?.details || 'Too many requests. Please wait a moment and try again.'}`);
+            return;
+          }
           
           // Fallback to parallel individual requests
           let standingsPromise: Promise<Standing[]>;
@@ -137,11 +154,24 @@ export default function Home() {
           if (predictedStandings.length === 0) {
             setCurrentMatchday(currentMatchdayData);
           }
+          clearTimeout(timeoutId);
         }
       }
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('Error fetching data:', error);
-      setError(error.response?.data?.error || 'Failed to fetch data. Please try again later.');
+      
+      // Better error handling with specific messages
+      if (error.response?.status === 429) {
+        setError('API rate limit reached. Please wait a moment and try again later.');
+      } else if (error.response?.status === 404) {
+        setError('League data not found. Please try another league.');
+      } else if (error.response?.status >= 500) {
+        setError('Football API server error. Please try again later.');
+      } else {
+        setError(error.response?.data?.error || error.response?.data?.details || 
+                'Failed to fetch data. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }
@@ -157,6 +187,14 @@ export default function Home() {
     if (!selectedLeague) return;
     
     setLoading(true);
+    setError(null);
+    
+    // Add a timeout to prevent infinite loading spinner
+    const timeoutId = setTimeout(() => {
+      setError('Request timed out. API may be rate limited. Please try again later.');
+      setLoading(false);
+    }, 15000); // 15 seconds timeout
+    
     try {
       // Use cache when possible
       const matchdayCacheKey = selectedLeague;
@@ -234,9 +272,22 @@ export default function Home() {
       setCurrentMatchday(targetMatchday);
       setInitialMatches(matches);
       setShowPredictions(true);
+      clearTimeout(timeoutId);
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('Error fetching current matchday:', error);
-      setError(error.response?.data?.error || 'Failed to start predictions. Please try again later.');
+      
+      // Better error handling with specific messages
+      if (error.response?.status === 429) {
+        setError('API rate limit reached. Please wait a moment and try again later.');
+      } else if (error.response?.status === 404) {
+        setError('Match data not found. Please try another league.');
+      } else if (error.response?.status >= 500) {
+        setError('Football API server error. Please try again later.');
+      } else {
+        setError(error.response?.data?.error || error.response?.data?.details || 
+                'Failed to start predictions. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }
@@ -244,17 +295,24 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="min-h-screen p-8 bg-background">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-card rounded-lg p-6 text-center">
-            <h3 className="text-xl font-medium text-red-400">Error</h3>
-            <p className="mt-2 text-secondary">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
-            >
-              Retry
-            </button>
+      <div className="min-h-screen p-8 bg-background flex items-center justify-center">
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="bg-card rounded-lg p-8 text-center shadow-lg border border-red-500/20">
+            <div className="mb-6 text-red-500">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold text-red-400 mb-4">Error Encountered</h3>
+            <p className="mt-2 text-secondary text-lg mb-6">{error}</p>
+            <div className="flex justify-center">
+              <button
+                onClick={() => window.location.reload()}
+                className="px-6 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         </div>
       </div>

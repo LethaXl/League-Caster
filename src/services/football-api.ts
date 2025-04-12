@@ -40,6 +40,7 @@ let isProcessingQueue = false;
 
 // Add delay between requests to avoid rate limiting
 const DELAY_BETWEEN_REQUESTS = 1000; // 1 second delay
+const MAX_RETRIES = 2;
 
 // Process the request queue with delay
 const processQueue = async () => {
@@ -75,12 +76,17 @@ api.interceptors.response.use(
   async error => {
     const originalRequest = error.config;
     
-    // If the error is due to rate limiting and we haven't retried yet
-    if (error.response?.status === 429 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    // If the error is due to rate limiting and we haven't retried too many times
+    if (error.response?.status === 429 && (!originalRequest._retryCount || originalRequest._retryCount < MAX_RETRIES)) {
+      // Initialize or increment retry count
+      originalRequest._retryCount = originalRequest._retryCount ? originalRequest._retryCount + 1 : 1;
       
-      // Wait for a longer time (exponential backoff)
-      const retryDelay = DELAY_BETWEEN_REQUESTS * 2;
+      // Extract retry-after header if available, or use exponential backoff
+      const retryAfter = error.response.headers['retry-after'];
+      const retryDelay = retryAfter ? parseInt(retryAfter) * 1000 : DELAY_BETWEEN_REQUESTS * Math.pow(2, originalRequest._retryCount);
+      
+      console.log(`Rate limited. Retrying after ${retryDelay}ms (attempt ${originalRequest._retryCount}/${MAX_RETRIES})`);
+      
       await new Promise(resolve => setTimeout(resolve, retryDelay));
       
       // Return the request in a wrapped promise that will be added to the queue
@@ -96,6 +102,13 @@ api.interceptors.response.use(
         
         processQueue();
       });
+    }
+    
+    // Customize the error to make it more informative for components
+    if (error.response?.status === 429) {
+      error.isRateLimited = true;
+      error.retryAfter = error.response.headers['retry-after'] || 'a few seconds';
+      error.friendlyMessage = `API rate limit reached. Please try again after ${error.retryAfter}.`;
     }
     
     return Promise.reject(error);

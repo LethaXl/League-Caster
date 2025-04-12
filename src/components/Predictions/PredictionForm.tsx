@@ -81,6 +81,12 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     setError(null);
     checkedMatchdays.current.add(matchday);
     
+    // Add a timeout to prevent infinite loading spinner
+    const timeoutId = setTimeout(() => {
+      setError('Request timed out. API may be rate limited. Please try again later.');
+      setLoading(false);
+    }, 15000); // 15 seconds timeout
+    
     try {
       // Use initialMatches if available on first render
       if (initialMatches.length > 0 && !matchdayCache.current.has(matchday)) {
@@ -114,6 +120,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             setPredictedStandings(deepCopyStandings);
           }
           
+          clearTimeout(timeoutId);
           setLoading(false);
           return;
         }
@@ -144,6 +151,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             setPredictedStandings(deepCopyStandings);
           }
           
+          clearTimeout(timeoutId);
           setLoading(false);
           return;
         }
@@ -152,6 +160,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Check if there's already a pending request for this matchday
       if (pendingRequests.current.has(matchday)) {
         const matchData = await pendingRequests.current.get(matchday);
+        clearTimeout(timeoutId);
         return;
       }
       
@@ -168,6 +177,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       if (matchData.length === 0) {
         // If no matches available, try the next matchday
         if (matchday < MAX_MATCHDAY) {
+          clearTimeout(timeoutId);
           setCurrentMatchday(matchday + 1);
           return;
         }
@@ -195,9 +205,21 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           setPredictedStandings(deepCopyStandings);
         }
       }
+      clearTimeout(timeoutId);
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('Error fetching matches:', error);
-      setError(error.response?.data?.error || 'Failed to fetch matches. Please try again later.');
+      // Better error handling with specific messages
+      if (error.response?.status === 429) {
+        setError('API rate limit reached. Please wait a moment and try again later.');
+      } else if (error.response?.status === 404) {
+        setError('Match data not found. Please try another matchday.');
+      } else if (error.response?.status >= 500) {
+        setError('Football API server error. Please try again later.');
+      } else {
+        setError(error.response?.data?.error || error.response?.data?.details || 
+                'Failed to fetch matches. Please try again later.');
+      }
       pendingRequests.current.delete(matchday);
     } finally {
       setLoading(false);
@@ -857,18 +879,27 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (error) {
     return (
       <div className="text-center py-8">
-        <h3 className="text-xl font-medium text-red-400">Error</h3>
-        <p className="mt-2 text-secondary">{error}</p>
-        <button
-          onClick={() => {
-            checkedMatchdays.current.clear();
-            matchdayCache.current.clear();
-            fetchMatches(currentMatchday);
-          }}
-          className="mt-4 px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
-        >
-          Retry
-        </button>
+        <div className="bg-card rounded-lg p-8 text-center shadow-lg border border-red-500/20">
+          <div className="mb-6 text-red-500">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-2xl font-bold text-red-400 mb-4">Error Loading Matches</h3>
+          <p className="mt-2 text-secondary text-lg mb-6">{error}</p>
+          <div className="flex justify-center">
+            <button
+              onClick={() => {
+                checkedMatchdays.current.clear();
+                matchdayCache.current.clear();
+                fetchMatches(currentMatchday);
+              }}
+              className="px-6 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
