@@ -121,7 +121,6 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                     <span className="w-8 text-center">{standing.position}</span>
                     <span className="w-10 flex items-center">
                       {euroCompetition && <CompetitionLogo logo={euroCompetition} />}
-                      <PositionChangeIndicator change={positionChange} />
                     </span>
                   </div>
                 </td>
@@ -135,8 +134,9 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                         className="object-contain"
                       />
                     </div>
-                    <div className="ml-4">
+                    <div className="ml-4 flex items-center">
                       <div className="text-sm font-medium text-primary">{standing.team.name}</div>
+                      <PositionChangeIndicator change={positionChange} />
                     </div>
                   </div>
                 </td>
