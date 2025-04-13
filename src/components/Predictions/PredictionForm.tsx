@@ -51,11 +51,21 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   // Load cached data from localStorage on mount
   useEffect(() => {
+    // Instead of clearing all cache, we'll just check the utcDate of matches
+    // to filter out matches that should have already been played
     const savedCache = localStorage.getItem(`matchdayCache_${leagueCode}`);
     if (savedCache) {
-      const parsedCache = JSON.parse(savedCache);
-      matchdayCache.current = new Map(Object.entries(parsedCache).map(([key, value]) => [parseInt(key), value as Match[]]));
+      try {
+        const parsedCache = JSON.parse(savedCache);
+        // Load the cache but we'll filter already played matches when we use it
+        matchdayCache.current = new Map(Object.entries(parsedCache).map(([key, value]) => [parseInt(key), value as Match[]]));
+      } catch (e) {
+        console.error("Error parsing cache:", e);
+      }
     }
+    
+    // Fetch data for the current matchday
+    fetchMatches(currentMatchday);
   }, [leagueCode]);
 
   // Save cache to localStorage whenever it changes
@@ -63,6 +73,43 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     const cacheObj = Object.fromEntries(matchdayCache.current.entries());
     localStorage.setItem(`matchdayCache_${leagueCode}`, JSON.stringify(cacheObj));
   }, [leagueCode]);
+
+  // Function to filter out matches that have likely already been played
+  const filterAlreadyPlayedMatches = (matches: Match[]): Match[] => {
+    const now = new Date();
+    // Keep only matches that are scheduled for the future or today
+    return matches.filter(match => {
+      const matchDate = new Date(match.utcDate);
+      // Keep a match if:
+      // 1. It's in the future, or
+      // 2. It's today and the status is still SCHEDULED or TIMED
+      return (
+        matchDate > now || 
+        (matchDate.toDateString() === now.toDateString() && 
+         (match.status === 'SCHEDULED' || match.status === 'TIMED'))
+      );
+    });
+  };
+
+  // Function to filter out the problematic Villarreal vs Espanyol match
+  const filterLaLigaProblematicMatches = (matches: Match[], currentMd: number): Match[] => {
+    if (leagueCode !== 'PD') return matches;
+    
+    return matches.filter(match => {
+      // Check for Villarreal CF vs RCD Espanyol de Barcelona match that's causing issues
+      const isProblematicMatch = 
+        (match.homeTeam.name.includes('Villarreal') && match.awayTeam.name.includes('Espanyol')) ||
+        (match.awayTeam.name.includes('Villarreal') && match.homeTeam.name.includes('Espanyol'));
+      
+      // Filter it out if it's showing in the wrong matchday (should only be in matchday 26)
+      if (isProblematicMatch && currentMd !== 26) {
+        console.log(`Filtered out problematic match: ${match.homeTeam.name} vs ${match.awayTeam.name} from matchday ${currentMd}`);
+        return false;
+      }
+      
+      return true;
+    });
+  };
 
   const fetchMatches = async (matchday: number) => {
     // Skip matchdays 27-30 for LaLiga
@@ -129,12 +176,17 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Check if we have cached data for this matchday
       if (matchdayCache.current.has(matchday)) {
         const cachedData = matchdayCache.current.get(matchday)!;
-        if (cachedData.length > 0) {
-          setMatches(cachedData);
+        // Filter out the problematic LaLiga match if needed
+        const laLigaFiltered = filterLaLigaProblematicMatches(cachedData, matchday);
+        // Filter out matches that have likely already been played
+        const filteredMatches = filterAlreadyPlayedMatches(laLigaFiltered);
+        
+        if (filteredMatches.length > 0) {
+          setMatches(filteredMatches);
           
           // Initialize predictions if we have matches
           const initialPredictions = new Map<number, Prediction>();
-          cachedData.forEach(match => {
+          filteredMatches.forEach(match => {
             initialPredictions.set(match.id, {
               matchId: match.id,
               type: 'draw'
@@ -171,10 +223,30 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       const matchData = await request;
       pendingRequests.current.delete(matchday);
       
-      matchdayCache.current.set(matchday, matchData);
+      // Special handling for LaLiga to remove problematic matches
+      let filteredMatchData = matchData;
+      if (leagueCode === 'PD') {
+        // Filter out the specific problematic fixtures that are showing up in multiple matchdays
+        filteredMatchData = matchData.filter(match => {
+          // Check for Villarreal CF vs RCD Espanyol de Barcelona match that's causing issues
+          const isProblematicMatch = 
+            (match.homeTeam.name.includes('Villarreal') && match.awayTeam.name.includes('Espanyol')) ||
+            (match.awayTeam.name.includes('Villarreal') && match.homeTeam.name.includes('Espanyol'));
+          
+          // Filter it out if it's showing in the wrong matchday
+          if (isProblematicMatch && currentMatchday !== 26) {
+            console.log(`Filtered out problematic match: ${match.homeTeam.name} vs ${match.awayTeam.name}`);
+            return false;
+          }
+          
+          return true;
+        });
+      }
+      
+      matchdayCache.current.set(matchday, filteredMatchData);
       saveCache();
       
-      if (matchData.length === 0) {
+      if (filteredMatchData.length === 0) {
         // If no matches available, try the next matchday
         if (matchday < MAX_MATCHDAY) {
           clearTimeout(timeoutId);
@@ -183,12 +255,12 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         }
       }
       
-      setMatches(matchData);
+      setMatches(filteredMatchData);
       
       // Initialize predictions with draws
-      if (matchData.length > 0) {
+      if (filteredMatchData.length > 0) {
         const initialPredictions = new Map<number, Prediction>();
-        matchData.forEach(match => {
+        filteredMatchData.forEach(match => {
           initialPredictions.set(match.id, {
             matchId: match.id,
             type: 'draw'
@@ -310,13 +382,18 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     // Check if we already have the next matchday's data in cache
     if (matchdayCache.current.has(nextMatchday)) {
       const cachedData = matchdayCache.current.get(nextMatchday)!;
-      if (cachedData.length > 0) {
+      // Filter out the problematic LaLiga match if needed
+      const laLigaFiltered = filterLaLigaProblematicMatches(cachedData, nextMatchday);
+      // Filter out matches that have likely already been played
+      const filteredMatches = filterAlreadyPlayedMatches(laLigaFiltered);
+      
+      if (filteredMatches.length > 0) {
         setCurrentMatchday(nextMatchday);
-        setMatches(cachedData);
+        setMatches(filteredMatches);
         
         // Initialize predictions with draws
         const initialPredictions = new Map<number, Prediction>();
-        cachedData.forEach(match => {
+        filteredMatches.forEach(match => {
           initialPredictions.set(match.id, {
             matchId: match.id,
             type: 'draw'
@@ -327,7 +404,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       }
     }
     
-    // Set loading state
+    // If no valid cached data, fetch from API
     setLoading(true);
     
     try {
@@ -345,6 +422,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         pendingRequests.current.set(nextMatchday, request);
         matchData = await request;
         pendingRequests.current.delete(nextMatchday);
+        
+        // Filter LaLiga problematic matches
+        if (leagueCode === 'PD') {
+          matchData = filterLaLigaProblematicMatches(matchData, nextMatchday);
+        }
         
         // Cache the result
         matchdayCache.current.set(nextMatchday, matchData);
@@ -372,7 +454,6 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     } catch (error) {
       console.error('Error fetching next matchday:', error);
       setError('Failed to fetch next matchday. Please try again.');
-      pendingRequests.current.delete(nextMatchday);
     } finally {
       setLoading(false);
     }
@@ -887,7 +968,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           </div>
           <h3 className="text-2xl font-bold text-red-400 mb-4">Error Loading Matches</h3>
           <p className="mt-2 text-secondary text-lg mb-6">{error}</p>
-          <div className="flex justify-center">
+          <div className="flex justify-center space-x-4">
             <button
               onClick={() => {
                 checkedMatchdays.current.clear();
@@ -897,6 +978,25 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
               className="px-6 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
             >
               Retry
+            </button>
+            <button
+              onClick={() => {
+                // Clear all caches and localStorage data
+                localStorage.removeItem(`matchdayCache_${leagueCode}`);
+                localStorage.removeItem('completedMatchdays');
+                localStorage.removeItem('completedMatches');
+                localStorage.removeItem('viewingCurrentStandingsFrom');
+                
+                // Clear in-memory caches
+                matchdayCache.current.clear();
+                checkedMatchdays.current.clear();
+                
+                // Refresh the page to reset everything
+                window.location.reload();
+              }}
+              className="px-6 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+            >
+              Reset All Data
             </button>
           </div>
         </div>
@@ -923,14 +1023,22 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           )}
           <button
             onClick={() => {
-              const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
-              completedMatchdays[leagueCode] = [];
-              localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
+              // Clear all caches and localStorage data
+              localStorage.removeItem(`matchdayCache_${leagueCode}`);
+              localStorage.removeItem('completedMatchdays');
+              localStorage.removeItem('completedMatches');
+              localStorage.removeItem('viewingCurrentStandingsFrom');
+              
+              // Clear in-memory caches
+              matchdayCache.current.clear();
+              checkedMatchdays.current.clear();
+              
+              // Refresh the page to reset everything
               window.location.reload();
             }}
             className="px-4 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
           >
-            Reset Progress (Fix Issues)
+            Reset All Data (Fix Issues)
           </button>
         </div>
       </div>
