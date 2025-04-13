@@ -77,17 +77,22 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   // Function to filter out matches that have likely already been played
   const filterAlreadyPlayedMatches = (matches: Match[]): Match[] => {
     const now = new Date();
-    // Keep only matches that are scheduled for the future or today
+    
+    // Filter matches that were scheduled for today but in the past
     return matches.filter(match => {
       const matchDate = new Date(match.utcDate);
-      // Keep a match if:
-      // 1. It's in the future, or
-      // 2. It's today and the status is still SCHEDULED or TIMED
-      return (
-        matchDate > now || 
-        (matchDate.toDateString() === now.toDateString() && 
-         (match.status === 'SCHEDULED' || match.status === 'TIMED'))
-      );
+      
+      // If match is today and scheduled in the past, filter it out
+      const isToday = matchDate.toDateString() === now.toDateString();
+      const isPastTime = matchDate < now;
+      
+      if (isToday && isPastTime) {
+        // This is a match that was scheduled earlier today - filter it out
+        return false;
+      }
+      
+      // Keep all other matches (future dates or today but in the future)
+      return true;
     });
   };
 
