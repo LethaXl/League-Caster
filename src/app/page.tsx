@@ -296,7 +296,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="min-h-screen p-8 bg-background flex items-center justify-center">
-        <div className="max-w-7xl mx-auto w-full">
+        <div className="max-w-7xl mx-auto">
           <div className="bg-card rounded-lg p-8 text-center shadow-lg border border-red-500/20">
             <div className="mb-6 text-red-500">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -320,14 +320,26 @@ export default function Home() {
   }
 
   if (!selectedLeague) {
+    // Format the current date as DD/MM/YYYY
+    const today = new Date();
+    const formattedDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    
     return (
-      <main className="min-h-screen p-8 bg-background">
-        <div className="max-w-7xl mx-auto">
+      <main className="min-h-screen bg-background overflow-hidden">
+        <div className="max-w-7xl mx-auto px-8 pt-8">
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold text-primary mb-4">League Caster</h1>
-            <p className="text-xl text-secondary">Select a league to view standings and make predictions</p>
+            <p className="text-large text-secondary">Select a league to view standings and start forecasting</p>
           </div>
+        </div>
+        <div className="w-full">
           <LeagueSelector onLeagueSelect={setSelectedLeague} />
+        </div>
+        <div className="max-w-7xl mx-auto px-8">
+          <div className="text-center mt-10 text-white font-medium text-lg">
+            Season 2024/2025
+            <div className="mt-1 text-xs text-gray-400">Last Updated: {formattedDate}</div>
+          </div>
         </div>
       </main>
     );
@@ -841,7 +853,7 @@ export default function Home() {
                 setIsViewingStandings(false);
                 setViewingFromMatchday(null);
               }}
-              className="mt-2 text-accent hover:text-accent-hover"
+              className="mt-2 text-accent hover:text-accent-hover transition-transform hover:scale-105"
             >
               ← Back to leagues
             </button>
@@ -891,7 +903,7 @@ export default function Home() {
                         setShowPredictions(true);
                         setViewingFromMatchday(null);
                       }}
-                      className="px-6 py-2 bg-card-border text-secondary rounded-full hover:bg-card transition-colors"
+                      className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
                     >
                       Back to Predictions
                     </button>
@@ -899,9 +911,9 @@ export default function Home() {
                   {!isViewingStandings && (
                     <button
                       onClick={handleStartPredictions}
-                      className="px-6 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
+                      className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
                     >
-                      Start Predictions
+                      Start Forecasting
                     </button>
                   )}
                 </div>

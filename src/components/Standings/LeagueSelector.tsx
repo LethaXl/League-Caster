@@ -94,7 +94,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
   }, []);
 
   return (
-    <div className="relative w-full h-[400px] bg-black/90 overflow-hidden">
+    <div className="relative w-full h-[400px] bg-black overflow-hidden">
       {/* Perspective container */}
       <div 
         className="relative w-full h-full"
@@ -183,7 +183,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
       {/* Navigation arrows */}
       <button
         onClick={handlePrevious}
-        className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white transition-colors z-50"
+        className="absolute left-[10%] top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white transition-colors z-50"
         disabled={isTransitioning}
       >
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -193,7 +193,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
 
       <button
         onClick={handleNext}
-        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white transition-colors z-50"
+        className="absolute right-[10%] top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white transition-colors z-50"
         disabled={isTransitioning}
       >
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
