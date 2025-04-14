@@ -188,6 +188,9 @@ export const getCurrentMatchday = async (leagueCode: string): Promise<number> =>
     interface ApiMatch extends Match {
       matchday: number;
       status: string;
+      utcDate: string;
+      homeTeam: { id: number; name: string };
+      awayTeam: { id: number; name: string };
     }
     
     const scheduledMatches = response.data.matches.filter(

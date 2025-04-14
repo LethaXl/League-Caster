@@ -20,6 +20,13 @@ const footballApi = axios.create({
   },
 });
 
+// Define interface for match data from API
+interface ApiMatch {
+  status: string;
+  matchday: number;
+  // Add other properties as needed
+}
+
 export async function GET(request: Request) {
   if (!API_KEY) {
     console.error('API_KEY is not defined in environment variables');
@@ -59,11 +66,11 @@ export async function GET(request: Request) {
       const standings = standingsResponse.data.standings[0].table;
       
       const scheduledMatches = matchesResponse.data.matches.filter(
-        (m: any) => m.status === 'SCHEDULED' || m.status === 'TIMED'
+        (m: ApiMatch) => m.status === 'SCHEDULED' || m.status === 'TIMED'
       );
       
       const currentMatchday = scheduledMatches.length > 0
-        ? Math.min(...scheduledMatches.map((m: any) => m.matchday))
+        ? Math.min(...scheduledMatches.map((m: ApiMatch) => m.matchday))
         : 1;
       
       // Return the combined data
@@ -104,21 +111,29 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(response.data);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { 
+      message: string; 
+      response?: { 
+        data?: { message?: string }; 
+        status?: number; 
+      }; 
+    };
+    
     console.error('API Error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
     });
 
     // Return more detailed error information
     return NextResponse.json(
       { 
         error: 'Failed to fetch data from football API',
-        details: error.response?.data?.message || error.message,
-        status: error.response?.status
+        details: err.response?.data?.message || err.message,
+        status: err.response?.status
       },
-      { status: error.response?.status || 500 }
+      { status: err.response?.status || 500 }
     );
   }
 } 

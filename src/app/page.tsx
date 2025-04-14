@@ -1,12 +1,25 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import LeagueSelector from '@/components/Standings/LeagueSelector';
 import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
 import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
+
+// Interface for API error responses
+interface ApiError {
+  message: string;
+  response?: {
+    status?: number;
+    data?: {
+      error?: string;
+      details?: string;
+      message?: string;
+    };
+  };
+}
 
 // Function to determine the max matchday for a league
 const getMaxMatchday = (leagueCode: string): number => {
@@ -65,7 +78,8 @@ export default function Home() {
     }
   }, [isViewingStandings]);
 
-  const fetchData = async () => {
+  // Convert fetchData to useCallback to fix the dependency warning
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -112,13 +126,14 @@ export default function Home() {
             setCurrentMatchday(currentMatchdayData);
           }
           clearTimeout(timeoutId);
-        } catch (error: any) {
-          console.error('Combined endpoint failed, falling back to separate requests:', error);
+        } catch (error: unknown) {
+          const err = error as ApiError;
+          console.error('Combined endpoint failed, falling back to separate requests:', err);
           
           // Check if rate limited (429)
-          if (error.response?.status === 429) {
+          if (err.response?.status === 429) {
             clearTimeout(timeoutId);
-            setError(`API rate limit reached: ${error.response?.data?.details || 'Too many requests. Please wait a moment and try again.'}`);
+            setError(`API rate limit reached: ${err.response?.data?.details || 'Too many requests. Please wait a moment and try again.'}`);
             return;
           }
           
@@ -157,31 +172,32 @@ export default function Home() {
           clearTimeout(timeoutId);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as ApiError;
       clearTimeout(timeoutId);
-      console.error('Error fetching data:', error);
+      console.error('Error fetching data:', err);
       
       // Better error handling with specific messages
-      if (error.response?.status === 429) {
+      if (err.response?.status === 429) {
         setError('API rate limit reached. Please wait a moment and try again later.');
-      } else if (error.response?.status === 404) {
+      } else if (err.response?.status === 404) {
         setError('League data not found. Please try another league.');
-      } else if (error.response?.status >= 500) {
+      } else if (err.response?.status && err.response.status >= 500) {
         setError('Football API server error. Please try again later.');
       } else {
-        setError(error.response?.data?.error || error.response?.data?.details || 
+        setError(err.response?.data?.error || err.response?.data?.details || 
                 'Failed to fetch data. Please try again later.');
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedLeague, predictedStandings.length, setCurrentMatchday]);
 
   useEffect(() => {
     if (!selectedLeague) return;
     
     fetchData();
-  }, [selectedLeague]);
+  }, [selectedLeague, fetchData]);
 
   const handleStartPredictions = async () => {
     if (!selectedLeague) return;
@@ -273,19 +289,20 @@ export default function Home() {
       setInitialMatches(matches);
       setShowPredictions(true);
       clearTimeout(timeoutId);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as ApiError;
       clearTimeout(timeoutId);
-      console.error('Error fetching current matchday:', error);
+      console.error('Error fetching current matchday:', err);
       
       // Better error handling with specific messages
-      if (error.response?.status === 429) {
+      if (err.response?.status === 429) {
         setError('API rate limit reached. Please wait a moment and try again later.');
-      } else if (error.response?.status === 404) {
+      } else if (err.response?.status === 404) {
         setError('Match data not found. Please try another league.');
-      } else if (error.response?.status >= 500) {
+      } else if (err.response?.status && err.response.status >= 500) {
         setError('Football API server error. Please try again later.');
       } else {
-        setError(error.response?.data?.error || error.response?.data?.details || 
+        setError(err.response?.data?.error || err.response?.data?.details || 
                 'Failed to start predictions. Please try again later.');
       }
     } finally {
