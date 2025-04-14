@@ -85,6 +85,14 @@ export async function GET(request: Request) {
       hasMatchday: !!matchday,
     });
 
+    // Ensure url is not null before making the request
+    if (!url) {
+      return NextResponse.json(
+        { error: 'Endpoint parameter is required' },
+        { status: 400 }
+      );
+    }
+
     const response = await footballApi.get(url);
     
     if (!response.data) {

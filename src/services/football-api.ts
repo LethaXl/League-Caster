@@ -53,7 +53,7 @@ const processQueue = async () => {
     if (request) {
       try {
         await request();
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error processing queued request:', error);
       }
       // Wait between requests
@@ -138,9 +138,14 @@ export const getLeagues = async (): Promise<League[]> => {
         endpoint: '/competitions'
       }
     });
+    
+    interface ApiCompetition extends League {
+      // Any additional fields from the API
+    }
+    
     return response.data.competitions
-      .filter((comp: any) => ['PL', 'BL1', 'FL1', 'SA', 'PD'].includes(comp.code))
-      .map((comp: League) => ({
+      .filter((comp: ApiCompetition) => ['PL', 'BL1', 'FL1', 'SA', 'PD'].includes(comp.code))
+      .map((comp: ApiCompetition) => ({
         ...comp,
         name: LEAGUE_NAME_MAPPING[comp.name] || comp.name
       }));
@@ -179,11 +184,17 @@ export const getCurrentMatchday = async (leagueCode: string): Promise<number> =>
         endpoint: `/competitions/${leagueCode}/matches`
       }
     });
+    
+    interface ApiMatch extends Match {
+      matchday: number;
+      status: string;
+    }
+    
     const scheduledMatches = response.data.matches.filter(
-      (m: Match) => m.status === 'SCHEDULED' || m.status === 'TIMED'
+      (m: ApiMatch) => m.status === 'SCHEDULED' || m.status === 'TIMED'
     );
     return scheduledMatches.length > 0
-      ? Math.min(...scheduledMatches.map((m: Match) => m.matchday))
+      ? Math.min(...scheduledMatches.map((m: ApiMatch) => m.matchday))
       : 1;
   });
 };

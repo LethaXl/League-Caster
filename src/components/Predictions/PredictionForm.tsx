@@ -29,7 +29,6 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     setCurrentMatchday,
     predictedStandings,
     setPredictedStandings,
-    isViewingStandings,
     setIsViewingStandings,
   } = usePrediction();
 
@@ -49,25 +48,6 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   // Keep track of ongoing API calls
   const pendingRequests = useRef<Map<number, Promise<Match[]>>>(new Map());
 
-  // Load cached data from localStorage on mount
-  useEffect(() => {
-    // Instead of clearing all cache, we'll just check the utcDate of matches
-    // to filter out matches that should have already been played
-    const savedCache = localStorage.getItem(`matchdayCache_${leagueCode}`);
-    if (savedCache) {
-      try {
-        const parsedCache = JSON.parse(savedCache);
-        // Load the cache but we'll filter already played matches when we use it
-        matchdayCache.current = new Map(Object.entries(parsedCache).map(([key, value]) => [parseInt(key), value as Match[]]));
-      } catch (e) {
-        console.error("Error parsing cache:", e);
-      }
-    }
-    
-    // Fetch data for the current matchday
-    fetchMatches(currentMatchday);
-  }, [leagueCode]);
-
   // Save cache to localStorage whenever it changes
   const saveCache = useCallback(() => {
     const cacheObj = Object.fromEntries(matchdayCache.current.entries());
@@ -75,7 +55,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   }, [leagueCode]);
 
   // Function to filter out matches that have likely already been played
-  const filterAlreadyPlayedMatches = (matches: Match[]): Match[] => {
+  const filterAlreadyPlayedMatches = useCallback((matches: Match[]): Match[] => {
     const now = new Date();
     
     // Filter matches that were scheduled for today but in the past
@@ -94,10 +74,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Keep all other matches (future dates or today but in the future)
       return true;
     });
-  };
+  }, []);
 
   // Function to filter out the problematic Villarreal vs Espanyol match
-  const filterLaLigaProblematicMatches = (matches: Match[], currentMd: number): Match[] => {
+  const filterLaLigaProblematicMatches = useCallback((matches: Match[], currentMd: number): Match[] => {
     if (leagueCode !== 'PD') return matches;
     
     return matches.filter(match => {
@@ -114,9 +94,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       return true;
     });
-  };
+  }, [leagueCode]);
 
-  const fetchMatches = async (matchday: number) => {
+  // Convert fetchMatches to use useCallback to avoid dependency issues in useEffect
+  const fetchMatches = useCallback(async (matchday: number) => {
     // Skip matchdays 27-30 for LaLiga
     if (leagueCode === 'PD' && matchday >= 27 && matchday <= 30) {
       // Move to matchday 31 if we're in the skipped range
@@ -216,7 +197,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       // Check if there's already a pending request for this matchday
       if (pendingRequests.current.has(matchday)) {
-        const matchData = await pendingRequests.current.get(matchday);
+        await pendingRequests.current.get(matchday);
         clearTimeout(timeoutId);
         return;
       }
@@ -283,29 +264,65 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         }
       }
       clearTimeout(timeoutId);
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       clearTimeout(timeoutId);
       console.error('Error fetching matches:', error);
       // Better error handling with specific messages
-      if (error.response?.status === 429) {
+      const err = error as { response?: { status?: number, data?: { error?: string, details?: string } } };
+      if (err.response?.status === 429) {
         setError('API rate limit reached. Please wait a moment and try again later.');
-      } else if (error.response?.status === 404) {
+      } else if (err.response?.status === 404) {
         setError('Match data not found. Please try another matchday.');
-      } else if (error.response?.status >= 500) {
+      } else if (err.response?.status && err.response.status >= 500) {
         setError('Football API server error. Please try again later.');
       } else {
-        setError(error.response?.data?.error || error.response?.data?.details || 
+        setError(err.response?.data?.error || err.response?.data?.details || 
                 'Failed to fetch matches. Please try again later.');
       }
       pendingRequests.current.delete(matchday);
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    leagueCode, 
+    saveCache, 
+    setCurrentMatchday,
+    setLoading,
+    setError,
+    setMatches,
+    setPredictions,
+    setPredictedStandings,
+    predictedStandings,
+    initialStandings,
+    initialMatches,
+    filterAlreadyPlayedMatches,
+    filterLaLigaProblematicMatches,
+    MAX_MATCHDAY,
+    currentMatchday
+  ]);
+
+  // Load cached data from localStorage on mount
+  useEffect(() => {
+    // Instead of clearing all cache, we'll just check the utcDate of matches
+    // to filter out matches that should have already been played
+    const savedCache = localStorage.getItem(`matchdayCache_${leagueCode}`);
+    if (savedCache) {
+      try {
+        const parsedCache = JSON.parse(savedCache);
+        // Load the cache but we'll filter already played matches when we use it
+        matchdayCache.current = new Map(Object.entries(parsedCache).map(([key, value]) => [parseInt(key), value as Match[]]));
+      } catch (e) {
+        console.error("Error parsing cache:", e);
+      }
+    }
+    
+    // Fetch data for the current matchday
+    fetchMatches(currentMatchday);
+  }, [leagueCode, currentMatchday, fetchMatches]);
 
   useEffect(() => {
     fetchMatches(currentMatchday);
-  }, [leagueCode, currentMatchday]);
+  }, [leagueCode, currentMatchday, fetchMatches]);
 
   const handlePredictionChange = (
     matchId: number,

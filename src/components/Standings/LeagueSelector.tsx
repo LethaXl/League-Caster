@@ -76,7 +76,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
     };
   };
 
-  const handleLogoClick = (index: number, league: League) => {
+  const handleLogoClick = (index: number) => {
     // Hardcoded mapping - get the league to the left (subtract 2 in a circular manner)
     const targetIndex = (index - 2 + leagues.length) % leagues.length;
     const targetLeague = leagues[targetIndex];
@@ -118,7 +118,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
                 key={league.code}
                 style={getItemStyle(index)}
                 className={`w-[180px] h-[180px] absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${isCenter ? 'cursor-pointer' : 'cursor-default'}`}
-                onClick={() => isCenter && handleLogoClick(index, league)}
+                onClick={() => isCenter && handleLogoClick(index)}
               >
                 <div className="relative w-full h-full" style={{ transformStyle: 'preserve-3d' }}>
                   <Image
@@ -134,7 +134,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
                     priority
                     onClick={isCenter ? (e) => {
                       e.stopPropagation();
-                      handleLogoClick(index, league);
+                      handleLogoClick(index);
                     } : undefined}
                   />
                   {/* Reflection - reduced size and opacity */}
@@ -170,7 +170,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
             <div 
               key={`overlay-${league.code}`}
               className="absolute w-[180px] h-[180px] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer z-[100]"
-              onClick={() => handleLogoClick(index, league)}
+              onClick={() => handleLogoClick(index)}
               style={{
                 pointerEvents: 'auto',
               }}
