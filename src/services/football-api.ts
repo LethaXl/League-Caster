@@ -34,8 +34,11 @@ export interface League {
   code: string;
 }
 
+// Define a generic type for request functions
+type RequestFunction = () => Promise<unknown>;
+
 // Global request queue to prevent rate limiting
-const requestQueue: Array<() => Promise<any>> = [];
+const requestQueue: Array<RequestFunction> = [];
 let isProcessingQueue = false;
 
 // Add delay between requests to avoid rate limiting
@@ -140,7 +143,21 @@ export const getLeagues = async (): Promise<League[]> => {
     });
     
     interface ApiCompetition extends League {
-      // Any additional fields from the API
+      // Additional fields from the football API
+      area?: {
+        id: number;
+        name: string;
+        code: string;
+        flag?: string;
+      };
+      currentSeason?: {
+        id: number;
+        startDate: string;
+        endDate: string;
+        currentMatchday: number;
+      };
+      numberOfAvailableSeasons?: number;
+      lastUpdated?: string;
     }
     
     return response.data.competitions
