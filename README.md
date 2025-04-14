@@ -3,7 +3,7 @@
 > **League Caster** is a sophisticated web application built with Next.js that allows football enthusiasts to predict outcomes across Europe's top five leagues (Premier League, La Liga, Bundesliga, Serie A, and Ligue 1). Using real-time data from the official football data API, users can simulate match results, visualize dynamic table updates, and forecast end-of-season standings, making it an essential tool for football analytics and entertainment.
 
 <div align="center">
-  <img src="./public/home.png" alt="League Caster Home Page" width="480">
+  <img src="./public/home.png" alt="League Caster Home Page" width="680">
 </div>
 
 ---
@@ -20,10 +20,9 @@
 
 ## 🛠 Technical Overview:
 
-- **Frontend Framework:** [Next.js 15](https://nextjs.org/) (App Router) with React 19
+- **Framework:** [Next.js 15](https://nextjs.org/) (App Router) with React 19 and TypeScript
 - **UI/Styling:** [Tailwind CSS 4](https://tailwindcss.com/) for responsive design
 - **API Integration:** [Football-Data.org API](https://www.football-data.org/) with Axios
-- **TypeScript:** Full TypeScript implementation for type safety
 - **Hosting:** Deployed on [Vercel](https://vercel.com/) for optimal Next.js performance
 - **Caching:** Client-side caching implementation to reduce API calls
 - **Data Processing:** Real-time standings calculation based on user predictions
