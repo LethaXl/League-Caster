@@ -7,10 +7,20 @@ interface MatchPredictionProps {
   onPredictionChange: (matchId: number, type: PredictionType, homeGoals?: number, awayGoals?: number) => void;
 }
 
+// Team name mapping for display purposes
+const getDisplayName = (name: string): string => {
+  if (name === 'Wolverhampton Wanderers FC') return 'Wolves';
+  return name;
+};
+
 export default function MatchPrediction({ match, onPredictionChange }: MatchPredictionProps) {
   const [predictionType, setPredictionType] = useState<PredictionType>('draw');
   const [homeGoals, setHomeGoals] = useState(0);
   const [awayGoals, setAwayGoals] = useState(0);
+  
+  // Get display names for teams
+  const homeTeamName = getDisplayName(match.homeTeam.name);
+  const awayTeamName = getDisplayName(match.awayTeam.name);
 
   const handlePredictionChange = (type: PredictionType) => {
     setPredictionType(type);
@@ -44,12 +54,12 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
                   <div className="relative w-8 h-8 mr-2">
                     <Image
                       src={match.homeTeam.crest || "/placeholder-team.png"}
-                      alt={match.homeTeam.name}
+                      alt={homeTeamName}
                       fill
                       className="object-contain"
                     />
                   </div>
-                  <span className="text-xs font-medium text-primary">{match.homeTeam.name}</span>
+                  <span className="text-xs font-medium text-primary">{homeTeamName}</span>
                 </div>
               </div>
 
@@ -59,11 +69,11 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
               {/* Away Team */}
               <div className="flex items-center justify-center mb-3">
                 <div className="flex items-center">
-                  <span className="text-xs font-medium text-primary mr-2">{match.awayTeam.name}</span>
+                  <span className="text-xs font-medium text-primary mr-2">{awayTeamName}</span>
                   <div className="relative w-8 h-8">
                     <Image
                       src={match.awayTeam.crest || "/placeholder-team.png"}
-                      alt={match.awayTeam.name}
+                      alt={awayTeamName}
                       fill
                       className="object-contain"
                     />
@@ -75,25 +85,31 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
             // Custom Score Layout
             <div className="flex flex-col items-center mb-3">
               <div className="flex justify-center items-center gap-6 mb-2">
-                <div className="relative w-8 h-8">
-                  <Image
-                    src={match.homeTeam.crest || "/placeholder-team.png"}
-                    alt={match.homeTeam.name}
-                    fill
-                    className="object-contain"
-                  />
+                <div className="text-center">
+                  <div className="relative w-8 h-8 mx-auto mb-1">
+                    <Image
+                      src={match.homeTeam.crest || "/placeholder-team.png"}
+                      alt={homeTeamName}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-primary">{homeTeamName}</span>
                 </div>
                 <span className="text-xs font-medium text-secondary opacity-60">VS</span>
-                <div className="relative w-8 h-8">
-                  <Image
-                    src={match.awayTeam.crest || "/placeholder-team.png"}
-                    alt={match.awayTeam.name}
-                    fill
-                    className="object-contain"
-                  />
+                <div className="text-center">
+                  <div className="relative w-8 h-8 mx-auto mb-1">
+                    <Image
+                      src={match.awayTeam.crest || "/placeholder-team.png"}
+                      alt={awayTeamName}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-primary">{awayTeamName}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 mt-2">
                 <div className="flex items-center">
                   <div className="flex flex-col mr-2">
                     <button

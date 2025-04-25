@@ -30,6 +30,10 @@ function getEuropeanCompetition(position: number, leagueCode?: string) {
       if (position === 7) return 'uecl_logo.png';
       return null;
     case 'PD': // La Liga (Spain)
+      if (position <= 5) return 'ucl_logo.png';
+      if (position >= 6 && position <= 7) return 'uel_logo.png';
+      if (position === 8) return 'uecl_logo.png';
+      return null;
     case 'SA': // Serie A (Italy)
     case 'BL1': // Bundesliga (Germany)
     case 'FL1': // Ligue 1 (France)
@@ -39,6 +43,26 @@ function getEuropeanCompetition(position: number, leagueCode?: string) {
       return null;
     default:
       return null;
+  }
+}
+
+// Helper function to determine relegation status
+function getRelegationStatus(position: number, leagueCode?: string): { status: 'relegated' | 'playoff' | null; color: string } {
+  if (!leagueCode) return { status: null, color: '' };
+  
+  switch(leagueCode) {
+    case 'PL': // Premier League (England)
+    case 'PD': // La Liga (Spain)
+    case 'SA': // Serie A (Italy)
+      if (position >= 18) return { status: 'relegated', color: 'text-red-500' };
+      return { status: null, color: '' };
+    case 'BL1': // Bundesliga (Germany)
+    case 'FL1': // Ligue 1 (France)
+      if (position === 16) return { status: 'playoff', color: 'text-yellow-500' };
+      if (position >= 17) return { status: 'relegated', color: 'text-red-500' };
+      return { status: null, color: '' };
+    default:
+      return { status: null, color: '' };
   }
 }
 
@@ -69,6 +93,17 @@ function CompetitionLogo({ logo }: { logo: string | null }) {
       height={18}
       className="object-contain"
     />
+  );
+}
+
+// Helper component for relegation indicator
+function RelegationIndicator({ status, color }: { status: 'relegated' | 'playoff' | null; color: string }) {
+  if (!status) return null;
+  
+  return (
+    <span className={`${color} font-bold text-sm ml-6`}>
+      ℝ
+    </span>
   );
 }
 
@@ -575,7 +610,8 @@ export default function StandingsTable({ standings, initialStandings, loading, l
             <th className="px-6 py-4 text-xs font-semibold text-secondary uppercase tracking-wider w-24 border-b border-card-border/50">
               <div className="flex">
                 <span className="w-8 text-center">Pos</span>
-                <span className="w-10"></span>
+                <span className="w-2"></span>
+                <span className="w-8"></span>
               </div>
             </th>
             <th className="px-6 py-4 text-left text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Team</th>
@@ -591,6 +627,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
           {sortedStandings.map((standing, index) => {
             const positionChange = getPositionChange(standing, initialStandings);
             const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
+            const relegationStatus = getRelegationStatus(standing.position, leagueCode);
             
             return (
               <tr 
@@ -600,7 +637,10 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-primary w-24">
                   <div className="flex">
                     <span className="w-8 text-center">{standing.position}</span>
-                    <span className="w-10 flex items-center">
+                    <span className="w-2 flex items-center justify-center">
+                      {relegationStatus.status && <RelegationIndicator status={relegationStatus.status} color={relegationStatus.color} />}
+                    </span>
+                    <span className="w-8 flex items-center">
                       {euroCompetition && <CompetitionLogo logo={euroCompetition} />}
                     </span>
                   </div>

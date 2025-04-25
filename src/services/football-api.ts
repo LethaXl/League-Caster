@@ -6,6 +6,12 @@ const LEAGUE_NAME_MAPPING: { [key: string]: string } = {
   // Add more mappings if needed
 };
 
+// Add team name mappings for display purposes
+const TEAM_NAME_MAPPING: { [key: string]: string } = {
+  'Wolverhampton Wanderers FC': 'Wolves',
+  // Add more team name mappings here as needed
+};
+
 export interface Team {
   id: number;
   name: string;
@@ -176,7 +182,17 @@ export const getStandings = async (leagueCode: string): Promise<Standing[]> => {
         endpoint: `/competitions/${leagueCode}/standings`
       }
     });
-    return response.data.standings[0].table;
+    
+    // Apply team name mappings to standings
+    return response.data.standings[0].table.map((standing: Standing) => {
+      return {
+        ...standing,
+        team: {
+          ...standing.team,
+          name: TEAM_NAME_MAPPING[standing.team.name] || standing.team.name
+        }
+      };
+    });
   });
 };
 
@@ -188,9 +204,33 @@ export const getMatches = async (leagueCode: string, matchday: number): Promise<
         matchday
       }
     });
-    return response.data.matches.filter((m: Match) => 
-      m.status === 'SCHEDULED' || m.status === 'TIMED'
-    );
+    
+    const now = new Date();
+    
+    // Filter matches that are scheduled and not in the past
+    return response.data.matches.filter((m: Match) => {
+      // Check match status - only include scheduled/timed matches
+      const validStatus = m.status === 'SCHEDULED' || m.status === 'TIMED';
+      
+      // Check match date - only include future matches
+      const matchDate = new Date(m.utcDate);
+      const isFutureMatch = matchDate > now;
+      
+      return validStatus && isFutureMatch;
+    }).map((match: Match) => {
+      // Apply team name mappings
+      return {
+        ...match,
+        homeTeam: {
+          ...match.homeTeam,
+          name: TEAM_NAME_MAPPING[match.homeTeam.name] || match.homeTeam.name
+        },
+        awayTeam: {
+          ...match.awayTeam,
+          name: TEAM_NAME_MAPPING[match.awayTeam.name] || match.awayTeam.name
+        }
+      };
+    });
   });
 };
 
@@ -224,45 +264,49 @@ export const processMatchPrediction = (
   homeTeam: string,
   awayTeam: string
 ): [MatchResult, MatchResult] => {
+  // Apply team name mappings for consistency
+  const mappedHomeTeam = TEAM_NAME_MAPPING[homeTeam] || homeTeam;
+  const mappedAwayTeam = TEAM_NAME_MAPPING[awayTeam] || awayTeam;
+  
   switch (prediction.type) {
     case 'home':
       return [
-        { name: homeTeam, result: 'win', goalDifference: 3 },
-        { name: awayTeam, result: 'loss', goalDifference: -3 }
+        { name: mappedHomeTeam, result: 'win', goalDifference: 3 },
+        { name: mappedAwayTeam, result: 'loss', goalDifference: -3 }
       ];
     case 'away':
       return [
-        { name: homeTeam, result: 'loss', goalDifference: -3 },
-        { name: awayTeam, result: 'win', goalDifference: 3 }
+        { name: mappedHomeTeam, result: 'loss', goalDifference: -3 },
+        { name: mappedAwayTeam, result: 'win', goalDifference: 3 }
       ];
     case 'draw':
       return [
-        { name: homeTeam, result: 'draw', goalDifference: 0 },
-        { name: awayTeam, result: 'draw', goalDifference: 0 }
+        { name: mappedHomeTeam, result: 'draw', goalDifference: 0 },
+        { name: mappedAwayTeam, result: 'draw', goalDifference: 0 }
       ];
     case 'custom':
       if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
         const diff = prediction.homeGoals - prediction.awayGoals;
         if (diff > 0) {
           return [
-            { name: homeTeam, result: 'win', goalDifference: diff },
-            { name: awayTeam, result: 'loss', goalDifference: -diff }
+            { name: mappedHomeTeam, result: 'win', goalDifference: diff },
+            { name: mappedAwayTeam, result: 'loss', goalDifference: -diff }
           ];
         } else if (diff < 0) {
           return [
-            { name: homeTeam, result: 'loss', goalDifference: diff },
-            { name: awayTeam, result: 'win', goalDifference: -diff }
+            { name: mappedHomeTeam, result: 'loss', goalDifference: diff },
+            { name: mappedAwayTeam, result: 'win', goalDifference: -diff }
           ];
         }
       }
       return [
-        { name: homeTeam, result: 'draw', goalDifference: 0 },
-        { name: awayTeam, result: 'draw', goalDifference: 0 }
+        { name: mappedHomeTeam, result: 'draw', goalDifference: 0 },
+        { name: mappedAwayTeam, result: 'draw', goalDifference: 0 }
       ];
     default:
       return [
-        { name: homeTeam, result: 'draw', goalDifference: 0 },
-        { name: awayTeam, result: 'draw', goalDifference: 0 }
+        { name: mappedHomeTeam, result: 'draw', goalDifference: 0 },
+        { name: mappedAwayTeam, result: 'draw', goalDifference: 0 }
       ];
   }
 };
@@ -342,8 +386,19 @@ export const getLeagueData = async (leagueCode: string): Promise<{ standings: St
       }
     });
     
+    // Apply team name mappings to standings
+    const mappedStandings = response.data.standings.map((standing: Standing) => {
+      return {
+        ...standing,
+        team: {
+          ...standing.team,
+          name: TEAM_NAME_MAPPING[standing.team.name] || standing.team.name
+        }
+      };
+    });
+    
     return {
-      standings: response.data.standings,
+      standings: mappedStandings,
       currentMatchday: response.data.currentMatchday
     };
   });
