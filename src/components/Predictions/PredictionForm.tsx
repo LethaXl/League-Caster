@@ -697,9 +697,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   const handleViewStandings = () => {
     // We'll pass a special flag to indicate viewing current standings during predictions
+    // Use the previous matchday for standings, not the current one being predicted
     setIsViewingStandings(true);
-    // Store the current matchday in localStorage for reference
-    localStorage.setItem('viewingCurrentStandingsFrom', String(currentMatchday));
+    // Store the previous matchday in localStorage for reference (the one whose results we're viewing)
+    const previousMatchday = currentMatchday > 1 ? currentMatchday - 1 : 1;
+    localStorage.setItem('viewingCurrentStandingsFrom', String(previousMatchday));
   };
 
   if (loading) {

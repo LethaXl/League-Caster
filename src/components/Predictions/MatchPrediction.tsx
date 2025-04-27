@@ -12,6 +12,7 @@ const getDisplayName = (name: string): string => {
   if (name === 'Wolverhampton Wanderers FC') return 'Wolves';
   if (name === 'RCD Espanyol de Barcelona') return 'RCD Espanyol';
   if (name === 'Club Atlético de Madrid') return 'Atletico Madrid';
+  if (name === 'Brighton & Hove Albion FC') return 'Brighton & Hove Albion';
   return name;
 };
 

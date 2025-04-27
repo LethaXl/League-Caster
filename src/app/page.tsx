@@ -902,7 +902,13 @@ export default function Home() {
           <div className="bg-card rounded-lg p-6">
             <div className="mb-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                <h2 className="text-2xl font-bold text-primary mb-2 sm:mb-0">Current Standings</h2>
+                <h2 className="text-2xl font-bold text-primary mb-2 sm:mb-0">
+                  {isViewingStandings || viewingFromMatchday 
+                    ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
+                      ? 'Final Table' 
+                      : `Standings after Matchday ${viewingFromMatchday || (currentMatchday > 1 ? currentMatchday - 1 : 1)}`
+                    : 'Current Standings'}
+                </h2>
                 <div className="flex space-x-4">
                   {isViewingStandings && !loading && viewingFromMatchday && (
                     <button

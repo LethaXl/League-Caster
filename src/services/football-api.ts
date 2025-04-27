@@ -11,6 +11,7 @@ const TEAM_NAME_MAPPING: { [key: string]: string } = {
   'Wolverhampton Wanderers FC': 'Wolves',
   'RCD Espanyol de Barcelona': 'RCD Espanyol',
   'Club Atlético de Madrid': 'Atletico Madrid',
+  'Brighton & Hove Albion FC': 'Brighton & Hove Albion',
   // Add more team name mappings here as needed
 };
 
