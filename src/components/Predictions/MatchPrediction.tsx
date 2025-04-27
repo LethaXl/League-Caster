@@ -10,6 +10,8 @@ interface MatchPredictionProps {
 // Team name mapping for display purposes
 const getDisplayName = (name: string): string => {
   if (name === 'Wolverhampton Wanderers FC') return 'Wolves';
+  if (name === 'RCD Espanyol de Barcelona') return 'RCD Espanyol';
+  if (name === 'Club Atlético de Madrid') return 'Atletico Madrid';
   return name;
 };
 
@@ -22,16 +24,13 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
   const homeTeamName = getDisplayName(match.homeTeam.name);
   const awayTeamName = getDisplayName(match.awayTeam.name);
 
-  // Truncate team names if they're too long
+  // Only use truncation for custom score view
   const truncateTeamName = (name: string) => {
     if (name.length > 20) {
       return name.substring(0, 17) + '...';
     }
     return name;
   };
-
-  const truncatedHomeTeam = truncateTeamName(homeTeamName);
-  const truncatedAwayTeam = truncateTeamName(awayTeamName);
 
   const handlePredictionChange = (type: PredictionType) => {
     setPredictionType(type);
@@ -60,7 +59,7 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
     <div 
       className={`bg-[#111111] rounded-lg p-4 border ${
         isHeadToHead 
-          ? 'border-[#f7e479] shadow-[0_0_10px_rgba(247,228,121,0.3)]' 
+          ? 'border-[#f7e479] shadow-[0_0_8px_rgba(247,228,121,0.3)]' 
           : 'border-[#2a2a2a] hover:border-[#333333]'
       } transition-colors h-full w-full`}
     >
@@ -77,8 +76,8 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
             <div className="flex flex-col w-full">
               {/* Home Team */}
               <div className="flex items-center justify-center mb-2">
-                <div className="flex items-center">
-                  <div className="relative w-8 h-8 mr-2">
+                <div className="flex items-center max-w-full">
+                  <div className="relative w-8 h-8 min-w-8 mr-2">
                     <Image
                       src={match.homeTeam.crest || "/placeholder-team.png"}
                       alt={homeTeamName}
@@ -86,7 +85,7 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
                       className="object-contain"
                     />
                   </div>
-                  <span className="text-xs font-medium text-primary">{truncatedHomeTeam}</span>
+                  <span className="text-xs font-medium text-primary overflow-x-auto scrollbar-hide">{homeTeamName}</span>
                 </div>
               </div>
 
@@ -95,9 +94,9 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
 
               {/* Away Team */}
               <div className="flex items-center justify-center">
-                <div className="flex items-center">
-                  <span className="text-xs font-medium text-primary mr-2">{truncatedAwayTeam}</span>
-                  <div className="relative w-8 h-8">
+                <div className="flex items-center max-w-full">
+                  <span className="text-xs font-medium text-primary mr-2 overflow-x-auto scrollbar-hide">{awayTeamName}</span>
+                  <div className="relative w-8 h-8 min-w-8">
                     <Image
                       src={match.awayTeam.crest || "/placeholder-team.png"}
                       alt={awayTeamName}
@@ -120,7 +119,7 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
                       className="object-contain"
                     />
                   </div>
-                  <span className="text-[10px] font-medium text-primary line-clamp-1">{truncatedHomeTeam}</span>
+                  <span className="text-[10px] font-medium text-primary line-clamp-1">{truncateTeamName(homeTeamName)}</span>
                 </div>
                 <span className="text-xs font-medium text-secondary opacity-60">VS</span>
                 <div className="text-center w-16">
@@ -132,7 +131,7 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
                       className="object-contain"
                     />
                   </div>
-                  <span className="text-[10px] font-medium text-primary line-clamp-1">{truncatedAwayTeam}</span>
+                  <span className="text-[10px] font-medium text-primary line-clamp-1">{truncateTeamName(awayTeamName)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-4">

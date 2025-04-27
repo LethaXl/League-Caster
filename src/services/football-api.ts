@@ -9,6 +9,8 @@ const LEAGUE_NAME_MAPPING: { [key: string]: string } = {
 // Add team name mappings for display purposes
 const TEAM_NAME_MAPPING: { [key: string]: string } = {
   'Wolverhampton Wanderers FC': 'Wolves',
+  'RCD Espanyol de Barcelona': 'RCD Espanyol',
+  'Club Atlético de Madrid': 'Atletico Madrid',
   // Add more team name mappings here as needed
 };
 
