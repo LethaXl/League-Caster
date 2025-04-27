@@ -79,13 +79,13 @@ export default function ModeSelection({ leagueCode, standings, onModeSelect }: M
               <div 
                 key={standing.team.id}
                 onClick={() => handleSelectTeam(standing.team.id)}
-                className={`flex items-center p-3 rounded-lg cursor-pointer transition-all ${
+                className={`flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all ${
                   selectedTeams.includes(standing.team.id) 
                     ? 'bg-[#f7e479]/10 border border-[#f7e479]' 
                     : 'bg-[#111111] border border-[#2a2a2a] hover:border-[#444444]'
                 }`}
               >
-                <div className="relative w-8 h-8 mr-3">
+                <div className="relative w-10 h-10 mb-2">
                   <Image
                     src={standing.team.crest || "/placeholder-team.png"}
                     alt={standing.team.name}
@@ -93,7 +93,7 @@ export default function ModeSelection({ leagueCode, standings, onModeSelect }: M
                     className="object-contain"
                   />
                 </div>
-                <span className={`text-sm font-medium ${
+                <span className={`text-sm font-medium text-center ${
                   selectedTeams.includes(standing.team.id) ? 'text-[#f7e479]' : 'text-primary'
                 }`}>
                   {standing.team.shortName || standing.team.name}

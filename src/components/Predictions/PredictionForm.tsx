@@ -1252,38 +1252,116 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         <h2 className="text-2xl font-bold text-primary">Matchday {currentMatchday} Fixtures</h2>
       </div>
 
-      {/* First row - center if only one match */}
-      <div className={`grid grid-cols-5 gap-4 ${matches.length === 1 ? 'justify-items-center' : ''}`}>
-        {matches.length === 1 ? (
-          <div className="col-start-3">
-            <MatchPrediction
-              key={matches[0].id}
-              match={matches[0]}
-              onPredictionChange={handlePredictionChange}
-            />
-          </div>
-        ) : (
-          matches.slice(0, 5).map(match => (
-            <MatchPrediction
-              key={match.id}
-              match={match}
-              onPredictionChange={handlePredictionChange}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Second row */}
-      {matches.length > 5 && (
-        <div className={`grid ${matches.length === 9 ? 'grid-cols-4 ml-[0%]' : 'grid-cols-5'} gap-4`}>
-          {matches.slice(5).map(match => (
-            <MatchPrediction
-              key={match.id}
-              match={match}
-              onPredictionChange={handlePredictionChange}
-            />
+      {matches.length <= 5 ? (
+        // Single row for 5 or fewer matches
+        <div className={`grid gap-4 mx-auto ${
+          matches.length === 1 ? 'grid-cols-1' : 
+          matches.length === 2 ? 'grid-cols-2' :
+          matches.length === 3 ? 'grid-cols-3' :
+          matches.length === 4 ? 'grid-cols-4' :
+          'grid-cols-5 w-full'
+        }`} style={{ width: matches.length <= 4 ? `${matches.length * 230}px` : '100%' }}>
+          {matches.map(match => (
+            <div key={match.id} style={{ width: '210px', height: '200px' }}>
+              <MatchPrediction
+                key={match.id}
+                match={match}
+                onPredictionChange={handlePredictionChange}
+              />
+            </div>
           ))}
         </div>
+      ) : (
+        <>
+          {/* First row */}
+          <div className={`grid gap-4 ${
+            matches.length === 8 ? 'grid-cols-4 w-full' : 
+            matches.length === 7 ? 'grid-cols-4 w-full' : 
+            matches.length === 6 ? 'grid-cols-3 w-full' : 
+            'grid-cols-5 w-full'
+          }`}>
+            {(() => {
+              if (matches.length === 8) {
+                return matches.slice(0, 4).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              } else if (matches.length === 7) {
+                return matches.slice(0, 4).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              } else if (matches.length === 6) {
+                return matches.slice(0, 3).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              } else {
+                return matches.slice(0, 5).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              }
+            })()}
+          </div>
+
+          {/* Second row */}
+          <div className={`grid gap-4 ${
+            matches.length === 8 ? 'grid-cols-4 w-full' : 
+            matches.length === 7 ? 'grid-cols-3 w-full' : 
+            matches.length === 6 ? 'grid-cols-3 w-full' : 
+            matches.length === 9 ? 'grid-cols-4 w-full' : 
+            'grid-cols-5 w-full'
+          }`}>
+            {(() => {
+              if (matches.length === 8) {
+                return matches.slice(4).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              } else if (matches.length === 7) {
+                return matches.slice(4).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              } else if (matches.length === 6) {
+                return matches.slice(3).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              } else {
+                return matches.slice(5).map(match => (
+                  <MatchPrediction
+                    key={match.id}
+                    match={match}
+                    onPredictionChange={handlePredictionChange}
+                  />
+                ));
+              }
+            })()}
+          </div>
+        </>
       )}
 
       <div className="flex justify-center space-x-4 mt-8">
