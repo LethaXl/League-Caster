@@ -40,6 +40,8 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCheckingMatchdays, setIsCheckingMatchdays] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Get the maximum matchday for this league
   const MAX_MATCHDAY = getMaxMatchday(leagueCode);
@@ -510,6 +512,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   };
 
   const handleSubmit = async () => {
+    // First phase: visual fading without full loading state
+    setIsProcessing(true);
+    
+    // Process data with visual indication but without triggering loading spinner
     let updatedStandings = [...predictedStandings];
 
     // Store both completed matchday and completed match IDs
@@ -552,6 +558,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     // Only show standings if we're at the very last matchday
     if (currentMatchday === MAX_MATCHDAY) {
       setIsViewingStandings(true);
+      setIsProcessing(false);
       return;
     }
     
@@ -566,6 +573,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     
     if (nextMatchday > MAX_MATCHDAY) {
       setIsViewingStandings(true);
+      setIsProcessing(false);
       return;
     }
 
@@ -580,28 +588,37 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Filter out matches that have already been played
       const filteredMatches = filterAlreadyPlayedMatches(laLigaFiltered);
       
-      if (filteredMatches.length > 0) {
-        setCurrentMatchday(nextMatchday);
-        setMatches(filteredMatches);
-        
-        // Initialize predictions with draws
+      // Apply race mode filtering here, before any UI updates
+      const raceFilteredMatches = filterMatchesForRaceMode(filteredMatches);
+      
+      if (raceFilteredMatches.length > 0) {
+        // Prepare next matchday data but don't update UI yet
+        const nextMatches = raceFilteredMatches;
         const initialPredictions = new Map<number, Prediction>();
-        filteredMatches.forEach(match => {
+        nextMatches.forEach(match => {
           initialPredictions.set(match.id, {
             matchId: match.id,
             type: 'draw'
           });
         });
-        setPredictions(initialPredictions);
+        
+        // Second phase: Update all state at once to avoid flash
+        setTimeout(() => {
+          setCurrentMatchday(nextMatchday);
+          setMatches(nextMatches);
+          setPredictions(initialPredictions);
+          setIsProcessing(false);
+        }, 300);
         return;
       }
     }
     
     // Only fetch from API if cache doesn't have the data (should be rare due to prefetching)
-    setLoading(true);
-    
     try {
       console.log(`Cache miss for matchday ${nextMatchday}. Fetching from API.`);
+      // Now we need to show loading state since we're making an API call
+      setLoading(true);
+      
       // Fetch matches for the next matchday
       const request = getMatches(leagueCode, nextMatchday);
       pendingRequests.current.set(nextMatchday, request);
@@ -616,23 +633,30 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Apply filter for already played matches
       matchData = filterAlreadyPlayedMatches(matchData);
       
-      // Cache the result
-      matchdayCache.current.set(nextMatchday, matchData);
+      // Apply race mode filtering before updating state
+      matchData = filterMatchesForRaceMode(matchData);
+      
+      // Cache the result (store the unfiltered data in cache)
+      const unfilteredForCache = filterAlreadyPlayedMatches(
+        leagueCode === 'PD' ? filterLaLigaProblematicMatches(await request, nextMatchday) : await request
+      );
+      matchdayCache.current.set(nextMatchday, unfilteredForCache);
       saveCache();
       
       if (matchData.length > 0) {
-        // Update the current matchday and matches
-        setCurrentMatchday(nextMatchday);
-        setMatches(matchData);
-        
-        // Initialize predictions with draws
+        // Prepare next matchday data
+        const nextMatches = matchData;
         const initialPredictions = new Map<number, Prediction>();
-        matchData.forEach(match => {
+        nextMatches.forEach(match => {
           initialPredictions.set(match.id, {
             matchId: match.id,
             type: 'draw'
           });
         });
+        
+        // Update all state at once to avoid flash
+        setCurrentMatchday(nextMatchday);
+        setMatches(nextMatches);
         setPredictions(initialPredictions);
       } else {
         // If no matches found for this matchday, try the next one
@@ -643,6 +667,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       setError('Failed to fetch next matchday. Please try again.');
     } finally {
       setLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -1201,6 +1226,8 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
               // Find the next matchday
               const nextMatchday = currentMatchday < MAX_MATCHDAY ? currentMatchday + 1 : currentMatchday;
               setCurrentMatchday(nextMatchday);
+              // Add prefetching for race mode
+              prefetchRemainingMatchdays(currentMatchday);
             }}
           />
         ) : (
@@ -1252,128 +1279,136 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         <h2 className="text-2xl font-bold text-primary">Matchday {currentMatchday} Fixtures</h2>
       </div>
 
-      {matches.length <= 5 ? (
-        // Single row for 5 or fewer matches
-        <div className={`grid gap-4 mx-auto ${
-          matches.length === 1 ? 'grid-cols-1' : 
-          matches.length === 2 ? 'grid-cols-2' :
-          matches.length === 3 ? 'grid-cols-3' :
-          matches.length === 4 ? 'grid-cols-4' :
-          'grid-cols-5 w-full'
-        }`} style={{ width: matches.length <= 4 ? `${matches.length * 230}px` : '100%' }}>
-          {matches.map(match => (
-            <div key={match.id} style={{ width: '210px', height: '200px' }}>
-              <MatchPrediction
-                key={match.id}
-                match={match}
-                onPredictionChange={handlePredictionChange}
-              />
+      {/* Improved transition effect */}
+      <div className={`transition-opacity duration-300 ${isProcessing ? 'opacity-40' : 'opacity-100'}`}>
+        {matches.length <= 5 ? (
+          // Single row for 5 or fewer matches
+          <div className={`grid gap-6 mx-auto ${
+            matches.length === 1 ? 'grid-cols-1' : 
+            matches.length === 2 ? 'grid-cols-2' :
+            matches.length === 3 ? 'grid-cols-3' :
+            matches.length === 4 ? 'grid-cols-4' :
+            'grid-cols-5 w-full'
+          }`} style={{ width: matches.length <= 4 ? `${matches.length * 230}px` : '100%' }}>
+            {matches.map(match => (
+              <div key={match.id} style={{ width: '210px', height: '200px' }}>
+                <MatchPrediction
+                  key={match.id}
+                  match={match}
+                  onPredictionChange={handlePredictionChange}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* First row - increase gap from 4 to 6 */}
+            <div className={`grid gap-6 ${
+              matches.length === 8 ? 'grid-cols-4 w-full' : 
+              matches.length === 7 ? 'grid-cols-4 w-full' : 
+              matches.length === 6 ? 'grid-cols-3 w-full' : 
+              'grid-cols-5 w-full'
+            }`}>
+              {(() => {
+                if (matches.length === 8) {
+                  return matches.slice(0, 4).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                } else if (matches.length === 7) {
+                  return matches.slice(0, 4).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                } else if (matches.length === 6) {
+                  return matches.slice(0, 3).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                } else {
+                  return matches.slice(0, 5).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                }
+              })()}
             </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* First row */}
-          <div className={`grid gap-4 ${
-            matches.length === 8 ? 'grid-cols-4 w-full' : 
-            matches.length === 7 ? 'grid-cols-4 w-full' : 
-            matches.length === 6 ? 'grid-cols-3 w-full' : 
-            'grid-cols-5 w-full'
-          }`}>
-            {(() => {
-              if (matches.length === 8) {
-                return matches.slice(0, 4).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              } else if (matches.length === 7) {
-                return matches.slice(0, 4).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              } else if (matches.length === 6) {
-                return matches.slice(0, 3).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              } else {
-                return matches.slice(0, 5).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              }
-            })()}
-          </div>
 
-          {/* Second row */}
-          <div className={`grid gap-4 ${
-            matches.length === 8 ? 'grid-cols-4 w-full' : 
-            matches.length === 7 ? 'grid-cols-3 w-full' : 
-            matches.length === 6 ? 'grid-cols-3 w-full' : 
-            matches.length === 9 ? 'grid-cols-4 w-full' : 
-            'grid-cols-5 w-full'
-          }`}>
-            {(() => {
-              if (matches.length === 8) {
-                return matches.slice(4).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              } else if (matches.length === 7) {
-                return matches.slice(4).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              } else if (matches.length === 6) {
-                return matches.slice(3).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              } else {
-                return matches.slice(5).map(match => (
-                  <MatchPrediction
-                    key={match.id}
-                    match={match}
-                    onPredictionChange={handlePredictionChange}
-                  />
-                ));
-              }
-            })()}
-          </div>
-        </>
-      )}
+            {/* Add margin between rows */}
+            <div className="mb-6"></div>
+
+            {/* Second row - increase gap from 4 to 6 */}
+            <div className={`grid gap-6 ${
+              matches.length === 8 ? 'grid-cols-4 w-full' : 
+              matches.length === 7 ? 'grid-cols-3 w-full' : 
+              matches.length === 6 ? 'grid-cols-3 w-full' : 
+              matches.length === 9 ? 'grid-cols-4 w-full' : 
+              'grid-cols-5 w-full'
+            }`}>
+              {(() => {
+                if (matches.length === 8) {
+                  return matches.slice(4).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                } else if (matches.length === 7) {
+                  return matches.slice(4).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                } else if (matches.length === 6) {
+                  return matches.slice(3).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                } else {
+                  return matches.slice(5).map(match => (
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
+                  ));
+                }
+              })()}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="flex justify-center space-x-4 mt-8">
         <button
           onClick={handleSubmit}
           className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+          disabled={isProcessing || loading}
         >
           Submit Predictions
         </button>
         <button
           onClick={handleViewStandings}
           className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+          disabled={isProcessing || loading}
         >
           View Standings
         </button>
