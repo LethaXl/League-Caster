@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Match, Prediction, PredictionType } from '@/types/predictions';
 import { getMatches, processMatchPrediction, updateStandings } from '@/services/football-api';
 import MatchPrediction from './MatchPrediction';
+import NoRaceMatches from './NoRaceMatches';
 import { Standing } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 
@@ -30,6 +31,8 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     predictedStandings,
     setPredictedStandings,
     setIsViewingStandings,
+    isRaceMode,
+    selectedTeamIds
   } = usePrediction();
 
   const [matches, setMatches] = useState<Match[]>([]);
@@ -95,6 +98,31 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       return true;
     });
   }, []);
+
+  // Function to filter matches for race mode (only including selected teams)
+  const filterMatchesForRaceMode = useCallback((matches: Match[]): Match[] => {
+    if (!isRaceMode || selectedTeamIds.length === 0) {
+      return matches;
+    }
+    
+    return matches.filter(match => {
+      const homeTeamId = match.homeTeam.id;
+      const awayTeamId = match.awayTeam.id;
+      
+      const isHomeTeamSelected = selectedTeamIds.includes(homeTeamId);
+      const isAwayTeamSelected = selectedTeamIds.includes(awayTeamId);
+      
+      // Mark matches between two selected teams as head-to-head
+      if (isHomeTeamSelected && isAwayTeamSelected) {
+        match.isHeadToHead = true;
+      } else {
+        match.isHeadToHead = false;
+      }
+      
+      // Include the match only if at least one of the teams is in the selected teams
+      return isHomeTeamSelected || isAwayTeamSelected;
+    });
+  }, [isRaceMode, selectedTeamIds]);
 
   // Function to filter out the problematic Villarreal vs Espanyol match
   const filterLaLigaProblematicMatches = useCallback((matches: Match[], currentMd: number): Match[] => {
@@ -203,6 +231,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         // Apply filter for already played matches
         unpredictedMatches = filterAlreadyPlayedMatches(unpredictedMatches);
         
+        // Apply race mode filter if enabled
+        unpredictedMatches = filterMatchesForRaceMode(unpredictedMatches);
+        
         if (unpredictedMatches.length > 0) {
           setMatches(unpredictedMatches);
           matchdayCache.current.set(matchday, unpredictedMatches);
@@ -242,7 +273,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         // Filter out the problematic LaLiga match if needed
         const laLigaFiltered = filterLaLigaProblematicMatches(cachedData, matchday);
         // Filter out matches that have already been played
-        const filteredMatches = filterAlreadyPlayedMatches(laLigaFiltered);
+        let filteredMatches = filterAlreadyPlayedMatches(laLigaFiltered);
+        // Apply race mode filter if enabled
+        filteredMatches = filterMatchesForRaceMode(filteredMatches);
         
         if (filteredMatches.length > 0) {
           setMatches(filteredMatches);
@@ -308,6 +341,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       // Apply filter for already played matches here too
       filteredMatchData = filterAlreadyPlayedMatches(filteredMatchData);
+      
+      // Apply race mode filter if enabled
+      filteredMatchData = filterMatchesForRaceMode(filteredMatchData);
       
       matchdayCache.current.set(matchday, filteredMatchData);
       saveCache();
@@ -381,6 +417,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     initialMatches,
     filterAlreadyPlayedMatches,
     filterLaLigaProblematicMatches,
+    filterMatchesForRaceMode,
     MAX_MATCHDAY,
     currentMatchday,
     prefetchRemainingMatchdays
@@ -1158,41 +1195,53 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (matches.length === 0) {
     return (
       <div className="text-center py-8">
-        <h3 className="text-xl font-medium text-primary">No Matches Available</h3>
-        <p className="mt-2 text-secondary">There are no scheduled matches for matchday {currentMatchday}.</p>
-        <div className="flex flex-col gap-3 mt-4 items-center">
-          {!isCheckingMatchdays && currentMatchday < MAX_MATCHDAY && (
-            <button
-              onClick={() => {
-                setIsCheckingMatchdays(true);
-                setCurrentMatchday(currentMatchday + 1);
-              }}
-              className="px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
-            >
-              Find Next Available Matchday
-            </button>
-          )}
-          <button
-            onClick={() => {
-              // Clear all caches and localStorage data
-              localStorage.removeItem(`matchdayCache_${leagueCode}`);
-              localStorage.removeItem(`cacheLastRefreshed_${leagueCode}`);
-              localStorage.removeItem('completedMatchdays');
-              localStorage.removeItem('completedMatches');
-              localStorage.removeItem('viewingCurrentStandingsFrom');
-              
-              // Clear in-memory caches
-              matchdayCache.current.clear();
-              checkedMatchdays.current.clear();
-              
-              // Refresh the page to reset everything
-              window.location.reload();
+        {isRaceMode ? (
+          <NoRaceMatches
+            onNextMatchday={() => {
+              // Find the next matchday
+              const nextMatchday = currentMatchday < MAX_MATCHDAY ? currentMatchday + 1 : currentMatchday;
+              setCurrentMatchday(nextMatchday);
             }}
-            className="px-4 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-          >
-            Reset All Data (Fix Issues)
-          </button>
-        </div>
+          />
+        ) : (
+          <>
+            <h3 className="text-xl font-medium text-primary">No Matches Available</h3>
+            <p className="mt-2 text-secondary">There are no scheduled matches for matchday {currentMatchday}.</p>
+            <div className="flex flex-col gap-3 mt-4 items-center">
+              {!isCheckingMatchdays && currentMatchday < MAX_MATCHDAY && (
+                <button
+                  onClick={() => {
+                    setIsCheckingMatchdays(true);
+                    setCurrentMatchday(currentMatchday + 1);
+                  }}
+                  className="px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
+                >
+                  Find Next Available Matchday
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  // Clear all caches and localStorage data
+                  localStorage.removeItem(`matchdayCache_${leagueCode}`);
+                  localStorage.removeItem(`cacheLastRefreshed_${leagueCode}`);
+                  localStorage.removeItem('completedMatchdays');
+                  localStorage.removeItem('completedMatches');
+                  localStorage.removeItem('viewingCurrentStandingsFrom');
+                  
+                  // Clear in-memory caches
+                  matchdayCache.current.clear();
+                  checkedMatchdays.current.clear();
+                  
+                  // Refresh the page to reset everything
+                  window.location.reload();
+                }}
+                className="px-4 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+              >
+                Reset All Data (Fix Issues)
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   }

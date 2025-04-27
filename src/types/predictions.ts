@@ -25,6 +25,7 @@ export interface Match {
       away: number | null;
     };
   };
+  isHeadToHead?: boolean;
 }
 
 export type PredictionType = 'home' | 'away' | 'draw' | 'custom';

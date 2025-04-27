@@ -11,6 +11,10 @@ interface PredictionContextType {
   isViewingStandings: boolean;
   setIsViewingStandings: (viewing: boolean) => void;
   resetPredictions: () => void;
+  isRaceMode: boolean;
+  setIsRaceMode: (isRace: boolean) => void;
+  selectedTeamIds: number[];
+  setSelectedTeamIds: (teamIds: number[]) => void;
 }
 
 const PredictionContext = createContext<PredictionContextType | undefined>(undefined);
@@ -19,14 +23,18 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
   const [currentMatchday, setCurrentMatchday] = useState(1);
   const [predictedStandings, setPredictedStandings] = useState<Standing[]>([]);
   const [isViewingStandings, setIsViewingStandings] = useState(false);
+  const [isRaceMode, setIsRaceMode] = useState(false);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<number[]>([]);
 
   // Load saved state from localStorage on mount
   useEffect(() => {
     const savedState = localStorage.getItem('predictionState');
     if (savedState) {
-      const { matchday, standings } = JSON.parse(savedState);
+      const { matchday, standings, isRace, teamIds } = JSON.parse(savedState);
       setCurrentMatchday(matchday);
       setPredictedStandings(standings);
+      if (isRace !== undefined) setIsRaceMode(isRace);
+      if (teamIds !== undefined) setSelectedTeamIds(teamIds);
     }
   }, []);
 
@@ -36,14 +44,18 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
       localStorage.setItem('predictionState', JSON.stringify({
         matchday: currentMatchday,
         standings: predictedStandings,
+        isRace: isRaceMode,
+        teamIds: selectedTeamIds,
       }));
     }
-  }, [currentMatchday, predictedStandings]);
+  }, [currentMatchday, predictedStandings, isRaceMode, selectedTeamIds]);
 
   const resetPredictions = () => {
     setCurrentMatchday(1);
     setPredictedStandings([]);
     setIsViewingStandings(false);
+    setIsRaceMode(false);
+    setSelectedTeamIds([]);
     localStorage.removeItem('predictionState');
     
     // Also clear completed matchdays for all leagues
@@ -60,6 +72,10 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
         isViewingStandings,
         setIsViewingStandings,
         resetPredictions,
+        isRaceMode,
+        setIsRaceMode,
+        selectedTeamIds,
+        setSelectedTeamIds,
       }}
     >
       {children}

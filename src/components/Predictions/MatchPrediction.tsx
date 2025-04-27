@@ -22,6 +22,17 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
   const homeTeamName = getDisplayName(match.homeTeam.name);
   const awayTeamName = getDisplayName(match.awayTeam.name);
 
+  // Truncate team names if they're too long
+  const truncateTeamName = (name: string) => {
+    if (name.length > 20) {
+      return name.substring(0, 17) + '...';
+    }
+    return name;
+  };
+
+  const truncatedHomeTeam = truncateTeamName(homeTeamName);
+  const truncatedAwayTeam = truncateTeamName(awayTeamName);
+
   const handlePredictionChange = (type: PredictionType) => {
     setPredictionType(type);
     if (type === 'custom') {
@@ -42,114 +53,128 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
     }
   };
 
+  // Determine if this is a head-to-head match in race mode
+  const isHeadToHead = match.isHeadToHead;
+
   return (
-    <div className="bg-[#111111] rounded-lg p-4 border border-[#2a2a2a] hover:border-[#333333] transition-colors">
+    <div className={`bg-[#111111] rounded-lg p-4 border ${
+      isHeadToHead 
+        ? 'border-[#f7e479] shadow-[0_0_10px_rgba(247,228,121,0.3)]' 
+        : 'border-[#2a2a2a] hover:border-[#333333]'
+    } transition-colors`}>
       <div className="flex flex-col h-full">
-        <div className="flex-grow">
-          {predictionType !== 'custom' ? (
-            <>
-              {/* Home Team */}
-              <div className="flex items-center justify-center mb-2">
-                <div className="flex items-center">
-                  <div className="relative w-8 h-8 mr-2">
-                    <Image
-                      src={match.homeTeam.crest || "/placeholder-team.png"}
-                      alt={homeTeamName}
-                      fill
-                      className="object-contain"
-                    />
+        {isHeadToHead && (
+          <div className="text-[#f7e479] text-xs font-medium mb-2 text-center">
+            Head-to-Head Match
+          </div>
+        )}
+        <div className="flex-grow h-[120px] flex items-center justify-center">
+          <div className="w-full">
+            {predictionType !== 'custom' ? (
+              <div className="flex flex-col">
+                {/* Home Team */}
+                <div className="flex items-center justify-center mb-2">
+                  <div className="flex items-center">
+                    <div className="relative w-8 h-8 mr-2">
+                      <Image
+                        src={match.homeTeam.crest || "/placeholder-team.png"}
+                        alt={homeTeamName}
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                    <span className="text-xs font-medium text-primary">{truncatedHomeTeam}</span>
                   </div>
-                  <span className="text-xs font-medium text-primary">{homeTeamName}</span>
-                </div>
-              </div>
-
-              {/* VS */}
-              <div className="text-center text-xs font-medium text-secondary opacity-60 mb-2">VS</div>
-
-              {/* Away Team */}
-              <div className="flex items-center justify-center mb-3">
-                <div className="flex items-center">
-                  <span className="text-xs font-medium text-primary mr-2">{awayTeamName}</span>
-                  <div className="relative w-8 h-8">
-                    <Image
-                      src={match.awayTeam.crest || "/placeholder-team.png"}
-                      alt={awayTeamName}
-                      fill
-                      className="object-contain"
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            // Custom Score Layout
-            <div className="flex flex-col items-center mb-3">
-              <div className="flex justify-center items-center gap-6 mb-2">
-                <div className="text-center">
-                  <div className="relative w-8 h-8 mx-auto mb-1">
-                    <Image
-                      src={match.homeTeam.crest || "/placeholder-team.png"}
-                      alt={homeTeamName}
-                      fill
-                      className="object-contain"
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-primary">{homeTeamName}</span>
-                </div>
-                <span className="text-xs font-medium text-secondary opacity-60">VS</span>
-                <div className="text-center">
-                  <div className="relative w-8 h-8 mx-auto mb-1">
-                    <Image
-                      src={match.awayTeam.crest || "/placeholder-team.png"}
-                      alt={awayTeamName}
-                      fill
-                      className="object-contain"
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-primary">{awayTeamName}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 mt-2">
-                <div className="flex items-center">
-                  <div className="flex flex-col mr-2">
-                    <button
-                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
-                      onClick={() => handleScoreChange('home', homeGoals + 1)}
-                    >
-                      +
-                    </button>
-                    <button
-                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
-                      onClick={() => handleScoreChange('home', homeGoals - 1)}
-                    >
-                      -
-                    </button>
-                  </div>
-                  <span className="text-2xl text-primary w-6 text-center">{homeGoals}</span>
                 </div>
 
-                <span className="text-xl text-secondary">:</span>
+                {/* VS */}
+                <div className="text-center text-xs font-medium text-secondary opacity-60 mb-2">VS</div>
 
-                <div className="flex items-center">
-                  <span className="text-2xl text-primary w-6 text-center">{awayGoals}</span>
-                  <div className="flex flex-col ml-2">
-                    <button
-                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
-                      onClick={() => handleScoreChange('away', awayGoals + 1)}
-                    >
-                      +
-                    </button>
-                    <button
-                      className="w-6 h-6 flex items-center justify-center text-sm text-secondary hover:text-[#f7e479] transition-colors"
-                      onClick={() => handleScoreChange('away', awayGoals - 1)}
-                    >
-                      -
-                    </button>
+                {/* Away Team */}
+                <div className="flex items-center justify-center mb-3">
+                  <div className="flex items-center">
+                    <span className="text-xs font-medium text-primary mr-2">{truncatedAwayTeam}</span>
+                    <div className="relative w-8 h-8">
+                      <Image
+                        src={match.awayTeam.crest || "/placeholder-team.png"}
+                        alt={awayTeamName}
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            ) : (
+              // Custom Score Layout
+              <div className="flex flex-col items-center">
+                <div className="flex justify-center items-center gap-6 mb-3">
+                  <div className="text-center w-16">
+                    <div className="relative w-8 h-8 mx-auto mb-2">
+                      <Image
+                        src={match.homeTeam.crest || "/placeholder-team.png"}
+                        alt={homeTeamName}
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                    <span className="text-[10px] font-medium text-primary line-clamp-1">{truncatedHomeTeam}</span>
+                  </div>
+                  <span className="text-xs font-medium text-secondary opacity-60">VS</span>
+                  <div className="text-center w-16">
+                    <div className="relative w-8 h-8 mx-auto mb-2">
+                      <Image
+                        src={match.awayTeam.crest || "/placeholder-team.png"}
+                        alt={awayTeamName}
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                    <span className="text-[10px] font-medium text-primary line-clamp-1">{truncatedAwayTeam}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 -mt-1">
+                  <div className="flex items-center">
+                    <div className="flex flex-col mr-1">
+                      <button
+                        className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-[#f7e479] transition-colors"
+                        onClick={() => handleScoreChange('home', homeGoals + 1)}
+                      >
+                        +
+                      </button>
+                      <button
+                        className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-[#f7e479] transition-colors"
+                        onClick={() => handleScoreChange('home', homeGoals - 1)}
+                      >
+                        −
+                      </button>
+                    </div>
+                    <span className="text-xl text-primary w-5 text-center">{homeGoals}</span>
+                  </div>
+
+                  <span className="text-lg text-primary mx-0">:</span>
+
+                  <div className="flex items-center">
+                    <span className="text-xl text-primary w-5 text-center">{awayGoals}</span>
+                    <div className="flex flex-col ml-1">
+                      <button
+                        className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-[#f7e479] transition-colors"
+                        onClick={() => handleScoreChange('away', awayGoals + 1)}
+                      >
+                        +
+                      </button>
+                      <button
+                        className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-[#f7e479] transition-colors"
+                        onClick={() => handleScoreChange('away', awayGoals - 1)}
+                      >
+                        −
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Prediction Buttons */}

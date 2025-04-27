@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import LeagueSelector from '@/components/Standings/LeagueSelector';
 import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
+import ModeSelection from '@/components/Predictions/ModeSelection';
 import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
@@ -37,6 +38,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPredictions, setShowPredictions] = useState(false);
+  const [showModeSelection, setShowModeSelection] = useState(false);
   const [viewingFromMatchday, setViewingFromMatchday] = useState<number | null>(null);
   
   // Cache for API data to reduce calls
@@ -53,6 +55,8 @@ export default function Home() {
     currentMatchday,
     resetPredictions,
     setCurrentMatchday,
+    setIsRaceMode,
+    setSelectedTeamIds
   } = usePrediction();
 
   // Determine the max matchday for the currently selected league
@@ -287,27 +291,43 @@ export default function Home() {
       resetPredictions();
       setCurrentMatchday(targetMatchday);
       setInitialMatches(matches);
-      setShowPredictions(true);
+      
+      // Show mode selection instead of predictions directly
+      setShowModeSelection(true);
+      setShowPredictions(false);
+      
       clearTimeout(timeoutId);
     } catch (error: unknown) {
-      const err = error as ApiError;
       clearTimeout(timeoutId);
-      console.error('Error fetching current matchday:', err);
+      console.error('Error fetching initial data:', error);
+      const err = error as ApiError;
       
-      // Better error handling with specific messages
       if (err.response?.status === 429) {
         setError('API rate limit reached. Please wait a moment and try again later.');
       } else if (err.response?.status === 404) {
-        setError('Match data not found. Please try another league.');
-      } else if (err.response?.status && err.response.status >= 500) {
-        setError('Football API server error. Please try again later.');
+        setError('League data not found. Please try another league.');
       } else {
-        setError(err.response?.data?.error || err.response?.data?.details || 
-                'Failed to start predictions. Please try again later.');
+        setError(err.message || 'Failed to fetch league data. Please try again later.');
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleModeSelect = (mode: 'normal' | 'race', selectedTeams?: number[]) => {
+    // Set mode in context
+    setIsRaceMode(mode === 'race');
+    
+    // Set selected teams if in race mode
+    if (mode === 'race' && selectedTeams && selectedTeams.length > 0) {
+      setSelectedTeamIds(selectedTeams);
+    } else {
+      setSelectedTeamIds([]);
+    }
+    
+    // Show predictions
+    setShowModeSelection(false);
+    setShowPredictions(true);
   };
 
   if (error) {
@@ -867,6 +887,7 @@ export default function Home() {
               onClick={() => {
                 setSelectedLeague(null);
                 setShowPredictions(false);
+                setShowModeSelection(false);
                 setIsViewingStandings(false);
                 setViewingFromMatchday(null);
               }}
@@ -877,29 +898,11 @@ export default function Home() {
           </div>
         </div>
 
-        {!showPredictions || isViewingStandings ? (
-          <div className="bg-card rounded-lg">
-            <div className="p-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-semibold text-primary">
-                    {isViewingStandings && viewingFromMatchday ? 'Current Standings' :
-                     isViewingStandings && isFinalMatchday ? 'Final Predicted Standings' : 
-                     isViewingStandings ? 'Predicted Standings' : 'Current Standings'}
-                  </h2>
-                  <p className="text-sm text-secondary">
-                    {selectedLeague === 'PL' ? 'Premier League' : 
-                     selectedLeague === 'BL1' ? 'Bundesliga' :
-                     selectedLeague === 'FL1' ? 'Ligue 1' :
-                     selectedLeague === 'SA' ? 'Serie A' : 'La Liga'}
-                    {/* Display previous matchday when viewing current standings from predictions */}
-                    {viewingFromMatchday && ` after Matchday ${viewingFromMatchday - 1}`}
-                    {/* Display current matchday for predicted standings */}
-                    {isViewingStandings && !isFinalMatchday && !viewingFromMatchday && ` after Matchday ${currentMatchday}`}
-                    {/* Display previous matchday when in prediction mode */}
-                    {!isViewingStandings && showPredictions && ` after Matchday ${currentMatchday - 1}`}
-                  </p>
-                </div>
+        {(!showPredictions && !showModeSelection) || isViewingStandings ? (
+          <div className="bg-card rounded-lg p-6">
+            <div className="mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                <h2 className="text-2xl font-bold text-primary mb-2 sm:mb-0">Current Standings</h2>
                 <div className="flex space-x-4">
                   {isViewingStandings && !loading && viewingFromMatchday && (
                     <button
@@ -918,6 +921,7 @@ export default function Home() {
                         setCurrentMatchday(nextMatchday);
                         setIsViewingStandings(false);
                         setShowPredictions(true);
+                        setShowModeSelection(false);
                         setViewingFromMatchday(null);
                       }}
                       className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
@@ -943,10 +947,16 @@ export default function Home() {
               leagueCode={selectedLeague || undefined}
             />
           </div>
+        ) : showModeSelection ? (
+          <ModeSelection 
+            leagueCode={selectedLeague || ''}
+            standings={standings}
+            onModeSelect={handleModeSelect}
+          />
         ) : (
           <div className="bg-card rounded-lg p-6">
             <PredictionForm
-              leagueCode={selectedLeague}
+              leagueCode={selectedLeague || ''}
               initialStandings={standings}
               initialMatches={initialMatches}
             />
