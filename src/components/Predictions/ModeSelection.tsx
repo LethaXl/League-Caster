@@ -65,7 +65,7 @@ export default function ModeSelection({ leagueCode, standings, onModeSelect }: M
           Focus only on teams in the title race, European chase, or relegation battle.
           </p>
           <p className="text-secondary mb-4">
-            See only fixtures involving your selected teams.
+            See only fixtures involving your selected teams and get summarized results at the end.
           </p>
         </div>
       </div>

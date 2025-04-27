@@ -150,52 +150,68 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const prefetchRemainingMatchdays = useCallback(async (startMatchday: number) => {
     console.log(`Prefetching remaining matchdays starting from ${startMatchday}`);
     
-    // Only prefetch if we haven't done so already for this league
-    const prefetchedKey = `prefetched_${leagueCode}`;
+    // Only prefetch if we haven't done so already for this league and session
+    const prefetchedKey = `prefetched_${leagueCode}_${isRaceMode ? 'race' : 'classic'}`;
     if (localStorage.getItem(prefetchedKey)) {
-      console.log('Already prefetched data for this league');
+      console.log(`Already prefetched data for this league in ${isRaceMode ? 'race' : 'classic'} mode`);
       return;
     }
+
+    // Set a flag to indicate prefetching is in progress
+    localStorage.setItem(`prefetching_${leagueCode}`, 'true');
     
-    // Prefetch remaining matchdays
-    for (let md = startMatchday + 1; md <= MAX_MATCHDAY; md++) {
-      // Skip problematic matchdays for LaLiga
-      if (leagueCode === 'PD' && md >= 27 && md <= 30) {
-        continue;
-      }
+    try {
+      // Limit how many matchdays to prefetch at once to reduce API load
+      const maxPrefetchCount = 3;
+      let prefetchCount = 0;
       
-      // Skip if we already have this matchday in cache
-      if (matchdayCache.current.has(md)) {
-        continue;
-      }
-      
-      try {
-        console.log(`Prefetching matchday ${md}`);
-        const matchData = await getMatches(leagueCode, md);
-        
-        // Filter LaLiga problematic matches
-        let filteredMatchData = matchData;
-        if (leagueCode === 'PD') {
-          filteredMatchData = filterLaLigaProblematicMatches(filteredMatchData, md);
+      // Prefetch remaining matchdays
+      for (let md = startMatchday + 1; md <= MAX_MATCHDAY && prefetchCount < maxPrefetchCount; md++) {
+        // Skip problematic matchdays for LaLiga
+        if (leagueCode === 'PD' && md >= 27 && md <= 30) {
+          continue;
         }
         
-        // Apply filter for already played matches
-        filteredMatchData = filterAlreadyPlayedMatches(filteredMatchData);
+        // Skip if we already have this matchday in cache
+        if (matchdayCache.current.has(md)) {
+          continue;
+        }
         
-        // Cache the result
-        matchdayCache.current.set(md, filteredMatchData);
-      } catch (error) {
-        console.error(`Error prefetching matchday ${md}:`, error);
-        // Continue with other matchdays even if one fails
+        try {
+          console.log(`Prefetching matchday ${md}`);
+          const matchData = await getMatches(leagueCode, md);
+          prefetchCount++;
+          
+          // Filter LaLiga problematic matches
+          let filteredMatchData = matchData;
+          if (leagueCode === 'PD') {
+            filteredMatchData = filterLaLigaProblematicMatches(filteredMatchData, md);
+          }
+          
+          // Apply filter for already played matches
+          filteredMatchData = filterAlreadyPlayedMatches(filteredMatchData);
+          
+          // Cache the result
+          matchdayCache.current.set(md, filteredMatchData);
+          
+          // Save cache after each successful fetch
+          saveCache();
+          
+          // Add a small delay between requests to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error(`Error prefetching matchday ${md}:`, error);
+          // Continue with other matchdays even if one fails
+        }
       }
+      
+      // Mark as prefetched for this mode
+      localStorage.setItem(prefetchedKey, 'true');
+    } finally {
+      // Remove the prefetching flag
+      localStorage.removeItem(`prefetching_${leagueCode}`);
     }
-    
-    // Save the entire cache
-    saveCache();
-    
-    // Mark as prefetched
-    localStorage.setItem(prefetchedKey, 'true');
-  }, [leagueCode, MAX_MATCHDAY, filterAlreadyPlayedMatches, filterLaLigaProblematicMatches, saveCache]);
+  }, [leagueCode, MAX_MATCHDAY, filterAlreadyPlayedMatches, filterLaLigaProblematicMatches, saveCache, isRaceMode]);
 
   // Convert fetchMatches to use useCallback to avoid dependency issues in useEffect
   const fetchMatches = useCallback(async (matchday: number) => {
@@ -481,6 +497,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         
         // Save the updated cache back to localStorage
         saveCache();
+        
+        // If there's no prefetching in progress, initiate prefetching
+        if (!localStorage.getItem(`prefetching_${leagueCode}`)) {
+          // Add a slight delay to ensure the initial fetch completes first
+          setTimeout(() => {
+            prefetchRemainingMatchdays(currentMatchday);
+          }, 1000);
+        }
       } catch (e) {
         console.error("Error parsing cache:", e);
       }
@@ -488,7 +512,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     
     // Fetch data for the current matchday
     fetchMatches(currentMatchday);
-  }, [leagueCode, currentMatchday, fetchMatches, saveCache, shouldRefreshCache, clearCache]);
+  }, [leagueCode, currentMatchday, fetchMatches, saveCache, shouldRefreshCache, clearCache, prefetchRemainingMatchdays]);
 
   useEffect(() => {
     fetchMatches(currentMatchday);
