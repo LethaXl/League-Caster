@@ -56,7 +56,12 @@ export default function Home() {
     resetPredictions,
     setCurrentMatchday,
     setIsRaceMode,
-    setSelectedTeamIds
+    setSelectedTeamIds,
+    selectedTeamIds,
+    isRaceMode,
+    setUnfilteredMatchesMode,
+    tableDisplayMode,
+    setTableDisplayMode
   } = usePrediction();
 
   // Determine the max matchday for the currently selected league
@@ -206,6 +211,9 @@ export default function Home() {
   const handleStartPredictions = async () => {
     if (!selectedLeague) return;
     
+    // Clear the initialFetchDone flag for this league
+    localStorage.removeItem(`${selectedLeague}_initialFetchDone`);
+    
     setLoading(true);
     setError(null);
     
@@ -292,7 +300,7 @@ export default function Home() {
       setCurrentMatchday(targetMatchday);
       setInitialMatches(matches);
       
-      // Show mode selection instead of predictions directly
+      // Show mode selection directly, without setTimeout
       setShowModeSelection(true);
       setShowPredictions(false);
       
@@ -314,20 +322,28 @@ export default function Home() {
     }
   };
 
-  const handleModeSelect = (mode: 'normal' | 'race', selectedTeams?: number[]) => {
-    // Set mode in context
-    setIsRaceMode(mode === 'race');
-    
-    // Set selected teams if in race mode
-    if (mode === 'race' && selectedTeams && selectedTeams.length > 0) {
-      setSelectedTeamIds(selectedTeams);
-    } else {
+  const handleModeSelect = (
+    mode: 'normal' | 'race', 
+    selectedTeams?: number[], 
+    unfilteredMatchesMode?: 'auto' | 'draws',
+    tableDisplayMode?: 'mini' | 'full'
+  ) => {
+    if (mode === 'normal') {
+      setIsRaceMode(false);
       setSelectedTeamIds([]);
+    } else if (mode === 'race' && selectedTeams && selectedTeams.length > 0) {
+      setIsRaceMode(true);
+      setSelectedTeamIds(selectedTeams);
+      if (unfilteredMatchesMode) {
+        setUnfilteredMatchesMode(unfilteredMatchesMode);
+      }
+      if (tableDisplayMode) {
+        setTableDisplayMode(tableDisplayMode);
+      }
     }
     
-    // Show predictions
-    setShowModeSelection(false);
     setShowPredictions(true);
+    setShowModeSelection(false);
   };
 
   if (error) {
@@ -885,11 +901,17 @@ export default function Home() {
             <h1 className="text-4xl font-bold text-primary">League Standings</h1>
             <button
               onClick={() => {
+                // Clear the initialFetchDone flags for all leagues
+                ['PL', 'BL1', 'FL1', 'SA', 'PD'].forEach(league => {
+                  localStorage.removeItem(`${league}_initialFetchDone`);
+                });
                 setSelectedLeague(null);
                 setShowPredictions(false);
                 setShowModeSelection(false);
                 setIsViewingStandings(false);
                 setViewingFromMatchday(null);
+                // Reset race mode when returning to league selection
+                resetPredictions();
               }}
               className="mt-2 text-accent hover:text-accent-hover transition-transform hover:scale-105"
             >
@@ -951,6 +973,7 @@ export default function Home() {
               initialStandings={isViewingStandings || viewingFromMatchday ? standings : undefined}
               loading={false} 
               leagueCode={selectedLeague || undefined}
+              selectedTeamIds={isRaceMode ? selectedTeamIds : undefined}
             />
           </div>
         ) : showModeSelection ? (

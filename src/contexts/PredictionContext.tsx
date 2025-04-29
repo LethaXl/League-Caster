@@ -15,6 +15,10 @@ interface PredictionContextType {
   setIsRaceMode: (isRace: boolean) => void;
   selectedTeamIds: number[];
   setSelectedTeamIds: (teamIds: number[]) => void;
+  unfilteredMatchesMode: 'auto' | 'draws';
+  setUnfilteredMatchesMode: (mode: 'auto' | 'draws') => void;
+  tableDisplayMode: 'mini' | 'full';
+  setTableDisplayMode: (mode: 'mini' | 'full') => void;
 }
 
 const PredictionContext = createContext<PredictionContextType | undefined>(undefined);
@@ -25,30 +29,53 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
   const [isViewingStandings, setIsViewingStandings] = useState(false);
   const [isRaceMode, setIsRaceMode] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<number[]>([]);
+  const [unfilteredMatchesMode, setUnfilteredMatchesMode] = useState<'auto' | 'draws'>('auto');
+  const [tableDisplayMode, setTableDisplayMode] = useState<'mini' | 'full'>('mini');
 
   // Load saved state from localStorage on mount
   useEffect(() => {
     const savedState = localStorage.getItem('predictionState');
     if (savedState) {
-      const { matchday, standings, isRace, teamIds } = JSON.parse(savedState);
-      setCurrentMatchday(matchday);
-      setPredictedStandings(standings);
-      if (isRace !== undefined) setIsRaceMode(isRace);
-      if (teamIds !== undefined) setSelectedTeamIds(teamIds);
+      try {
+        const { 
+          matchday, 
+          standings, 
+          isRace, 
+          teamIds, 
+          unfilteredMode, 
+          tableMode 
+        } = JSON.parse(savedState);
+        
+        if (matchday !== undefined) setCurrentMatchday(matchday);
+        if (standings !== undefined) setPredictedStandings(standings);
+        if (isRace !== undefined) setIsRaceMode(isRace);
+        if (teamIds !== undefined) setSelectedTeamIds(teamIds);
+        if (unfilteredMode !== undefined) setUnfilteredMatchesMode(unfilteredMode);
+        if (tableMode !== undefined) setTableDisplayMode(tableMode);
+      } catch (e) {
+        console.error('Error parsing prediction state:', e);
+        localStorage.removeItem('predictionState');
+      }
     }
   }, []);
 
   // Save state to localStorage whenever it changes
   useEffect(() => {
+    // Only save when we have actual prediction data
     if (predictedStandings.length > 0) {
-      localStorage.setItem('predictionState', JSON.stringify({
+      const state = {
         matchday: currentMatchday,
         standings: predictedStandings,
         isRace: isRaceMode,
         teamIds: selectedTeamIds,
-      }));
+        unfilteredMode: unfilteredMatchesMode,
+        tableMode: tableDisplayMode,
+      };
+      
+      localStorage.setItem('predictionState', JSON.stringify(state));
+      console.log('Saved prediction state to localStorage', state);
     }
-  }, [currentMatchday, predictedStandings, isRaceMode, selectedTeamIds]);
+  }, [currentMatchday, predictedStandings, isRaceMode, selectedTeamIds, unfilteredMatchesMode, tableDisplayMode]);
 
   const resetPredictions = () => {
     setCurrentMatchday(1);
@@ -56,10 +83,13 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
     setIsViewingStandings(false);
     setIsRaceMode(false);
     setSelectedTeamIds([]);
+    setUnfilteredMatchesMode('auto');
+    setTableDisplayMode('mini');
     localStorage.removeItem('predictionState');
     
     // Also clear completed matchdays for all leagues
     localStorage.removeItem('completedMatchdays');
+    localStorage.removeItem('completedMatches');
   };
 
   return (
@@ -76,6 +106,10 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
         setIsRaceMode,
         selectedTeamIds,
         setSelectedTeamIds,
+        unfilteredMatchesMode,
+        setUnfilteredMatchesMode,
+        tableDisplayMode,
+        setTableDisplayMode,
       }}
     >
       {children}

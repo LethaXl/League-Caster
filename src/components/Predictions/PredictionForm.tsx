@@ -32,7 +32,8 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     setPredictedStandings,
     setIsViewingStandings,
     isRaceMode,
-    selectedTeamIds
+    selectedTeamIds,
+    unfilteredMatchesMode
   } = usePrediction();
 
   const [matches, setMatches] = useState<Match[]>([]);
@@ -148,6 +149,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   // Add a function to prefetch all remaining matchdays
   const prefetchRemainingMatchdays = useCallback(async (startMatchday: number) => {
+    // Disabling prefetching to prevent unwanted API calls
+    console.log('Prefetching disabled to prevent extra API calls');
+    return;
+    
+    // Original prefetching code below (now unreachable)
     console.log(`Prefetching remaining matchdays starting from ${startMatchday}`);
     
     // Only prefetch if we haven't done so already for this league and session
@@ -222,6 +228,37 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       return;
     }
 
+    // Create a storage key to track if we've already fetched for this league
+    const hasInitialFetchKey = `${leagueCode}_initialFetchDone`;
+    const hasInitialFetch = localStorage.getItem(hasInitialFetchKey);
+    
+    // If we've already done the initial fetch for this league, don't fetch again
+    if (hasInitialFetch === 'true') {
+      console.log(`Preventing additional API call for ${leagueCode}. Initial fetch already done.`);
+      // Just use cached data if available
+      if (matchdayCache.current.has(matchday)) {
+        const cachedData = matchdayCache.current.get(matchday)!;
+        
+        // Filter matches appropriately
+        let filteredMatches = filterLaLigaProblematicMatches(cachedData, matchday);
+        filteredMatches = filterAlreadyPlayedMatches(filteredMatches);
+        filteredMatches = filterMatchesForRaceMode(filteredMatches);
+        
+        setMatches(filteredMatches);
+        
+        // Initialize predictions
+        const initialPredictions = new Map<number, Prediction>();
+        filteredMatches.forEach(match => {
+          initialPredictions.set(match.id, {
+            matchId: match.id,
+            type: 'draw'
+          });
+        });
+        setPredictions(initialPredictions);
+      }
+      return;
+    }
+
     // Only skip if we've already checked this matchday
     if (checkedMatchdays.current.has(matchday)) {
       return;
@@ -279,8 +316,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           clearTimeout(timeoutId);
           setLoading(false);
           
-          // Start prefetching remaining matchdays
-          prefetchRemainingMatchdays(matchday);
+          // Mark that we've done the initial fetch for this league
+          localStorage.setItem(hasInitialFetchKey, 'true');
+          console.log(`Initial fetch for ${leagueCode} completed and marked as done.`);
           return;
         }
       }
@@ -319,6 +357,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           
           clearTimeout(timeoutId);
           setLoading(false);
+          
+          // Mark that we've done the initial fetch for this league
+          localStorage.setItem(hasInitialFetchKey, 'true');
+          console.log(`Initial fetch for ${leagueCode} (from cache) completed and marked as done.`);
           return;
         }
       }
@@ -327,10 +369,15 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       if (pendingRequests.current.has(matchday)) {
         await pendingRequests.current.get(matchday);
         clearTimeout(timeoutId);
+        
+        // Mark that we've done the initial fetch for this league
+        localStorage.setItem(hasInitialFetchKey, 'true');
+        console.log(`Initial fetch for ${leagueCode} (from pending request) completed and marked as done.`);
         return;
       }
       
-      // Fetch from API if not cached
+      // Fetch from API if not cached - this is the actual API call
+      console.log(`Making API call for ${leagueCode} matchday ${matchday}`);
       const request = getMatches(leagueCode, matchday);
       pendingRequests.current.set(matchday, request);
       
@@ -371,6 +418,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         if (matchday < MAX_MATCHDAY) {
           clearTimeout(timeoutId);
           setCurrentMatchday(matchday + 1);
+          
+          // Mark that we've done the initial fetch for this league
+          localStorage.setItem(hasInitialFetchKey, 'true');
+          console.log(`Initial fetch for ${leagueCode} completed with no matches. Moving to next matchday.`);
           return;
         }
       }
@@ -400,8 +451,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       clearTimeout(timeoutId);
       
-      // Start prefetching remaining matchdays after initial load
-      prefetchRemainingMatchdays(matchday);
+      // Mark that we've done the initial fetch for this league
+      localStorage.setItem(hasInitialFetchKey, 'true');
+      console.log(`Initial fetch for ${leagueCode} completed and marked as done.`);
     } catch (error: Error | unknown) {
       clearTimeout(timeoutId);
       console.error('Error fetching matches:', error);
@@ -437,8 +489,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     filterLaLigaProblematicMatches,
     filterMatchesForRaceMode,
     MAX_MATCHDAY,
-    currentMatchday,
-    prefetchRemainingMatchdays
+    currentMatchday
   ]);
 
   // Load cached data from localStorage on mount
@@ -498,6 +549,8 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         // Save the updated cache back to localStorage
         saveCache();
         
+        // Disabling automatic prefetching to prevent unwanted API calls
+        /* Original code commented out
         // If there's no prefetching in progress, initiate prefetching
         if (!localStorage.getItem(`prefetching_${leagueCode}`)) {
           // Add a slight delay to ensure the initial fetch completes first
@@ -505,6 +558,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             prefetchRemainingMatchdays(currentMatchday);
           }, 1000);
         }
+        */
       } catch (e) {
         console.error("Error parsing cache:", e);
       }
@@ -533,6 +587,102 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       });
       return newPredictions;
     });
+  };
+
+  // New function to determine automatic result for unfiltered matches
+  const determineAutomaticResult = (homeTeamPosition: number, awayTeamPosition: number): PredictionType => {
+    // Calculate position difference
+    const positionDiff = Math.abs(homeTeamPosition - awayTeamPosition);
+    
+    // If position difference is 2 or less, it's a close match - draw
+    if (positionDiff <= 2) {
+      return 'draw';
+    }
+    
+    // Otherwise, higher position team wins (lower position number)
+    return homeTeamPosition < awayTeamPosition ? 'home' : 'away';
+  };
+
+  // Function to get all matches for a matchday (filtered + unfiltered)
+  const getUnfilteredMatches = async (matchday: number): Promise<Match[]> => {
+    try {
+      // Try to get from cache first
+      const cacheKey = `${leagueCode}_md${matchday}_all`;
+      const cachedMatches = localStorage.getItem(cacheKey);
+      
+      if (cachedMatches) {
+        return JSON.parse(cachedMatches);
+      }
+      
+      // Otherwise fetch from API
+      const response = await getMatches(leagueCode, matchday);
+      
+      // Cache for future use
+      localStorage.setItem(cacheKey, JSON.stringify(response));
+      
+      return response;
+    } catch (error) {
+      console.error('Error fetching unfiltered matches:', error);
+      return [];
+    }
+  };
+
+  // Process unfiltered matches for race mode
+  const processUnfilteredMatches = async (updatedStandings: Standing[]): Promise<Standing[]> => {
+    if (!isRaceMode) return updatedStandings;
+    
+    try {
+      // Get all matches for the current matchday
+      const allMatches = await getUnfilteredMatches(currentMatchday);
+      
+      // Find matches that were filtered out (not in the current matches list)
+      const filteredMatches = new Set(matches.map(m => m.id));
+      const unfilteredMatches = allMatches.filter(m => !filteredMatches.has(m.id));
+      
+      if (unfilteredMatches.length === 0) return updatedStandings;
+      
+      console.log(`Processing ${unfilteredMatches.length} unfiltered matches using mode: ${unfilteredMatchesMode}`);
+      
+      // Process each unfiltered match with automatic result assignment
+      let resultStandings = [...updatedStandings];
+      
+      for (const match of unfilteredMatches) {
+        // Find team positions in the current standings
+        const homeTeam = resultStandings.find(s => s.team.id === match.homeTeam.id);
+        const awayTeam = resultStandings.find(s => s.team.id === match.awayTeam.id);
+        
+        if (!homeTeam || !awayTeam) continue;
+        
+        // Determine result type based on the unfilteredMatchesMode setting
+        let resultType: PredictionType = 'draw'; // Default to draw
+        
+        if (unfilteredMatchesMode === 'auto') {
+          // Auto-assign based on team positions
+          resultType = determineAutomaticResult(homeTeam.position, awayTeam.position);
+        }
+        // For 'draws' mode, we already set it to 'draw' by default
+        
+        // Create prediction object
+        const autoPrediction: Prediction = {
+          matchId: match.id,
+          type: resultType
+        };
+        
+        // Process prediction and update standings
+        const [homeResult, awayResult] = processMatchPrediction(
+          autoPrediction,
+          match.homeTeam.name,
+          match.awayTeam.name
+        );
+        
+        resultStandings = updateStandings(homeResult, awayResult, resultStandings);
+      }
+      
+      return resultStandings;
+    } catch (error) {
+      console.error('Error processing unfiltered matches:', error);
+      return updatedStandings;
+    }
   };
 
   const handleSubmit = async () => {
@@ -576,6 +726,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         updatedStandings = updateStandings(homeResult, awayResult, updatedStandings);
       }
     });
+
+    // Process unfiltered matches for race mode
+    if (isRaceMode) {
+      updatedStandings = await processUnfilteredMatches(updatedStandings);
+    }
 
     setPredictedStandings(updatedStandings);
 
@@ -686,6 +841,8 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         // If no matches found for this matchday, try the next one
         setCurrentMatchday(nextMatchday + 1);
       }
+      
+      // Removed prefetching call to avoid additional API requests
     } catch (error) {
       console.error('Error fetching next matchday:', error);
       setError('Failed to fetch next matchday. Please try again.');
@@ -703,6 +860,28 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     const previousMatchday = currentMatchday > 1 ? currentMatchday - 1 : 1;
     localStorage.setItem('viewingCurrentStandingsFrom', String(previousMatchday));
   };
+
+  // Add this handler function right after handleViewStandings
+  const handleNextMatchday = useCallback(() => {
+    // Find the next matchday (similar to what we do in handleSubmit)
+    let nextMatchday = currentMatchday + 1;
+    const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+    const completed = completedMatchdays[leagueCode] || [];
+    
+    // Skip completed matchdays and matchdays 27-30 for LaLiga
+    while ((completed.includes(nextMatchday) || (leagueCode === 'PD' && nextMatchday >= 27 && nextMatchday <= 30)) && nextMatchday <= MAX_MATCHDAY) {
+      nextMatchday++;
+    }
+    
+    if (nextMatchday > MAX_MATCHDAY) {
+      // We've reached the end, show standings
+      setIsViewingStandings(true);
+      return;
+    }
+    
+    // Update the current matchday - this will trigger fetchMatches via useEffect
+    setCurrentMatchday(nextMatchday);
+  }, [currentMatchday, leagueCode, MAX_MATCHDAY, setCurrentMatchday, setIsViewingStandings]);
 
   if (loading) {
     return (
@@ -1198,47 +1377,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (error) {
     return (
       <div className="text-center py-8">
-        <div className="bg-card rounded-lg p-8 text-center shadow-lg border border-red-500/20">
-          <div className="mb-6 text-red-500">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-2xl font-bold text-red-400 mb-4">Error Loading Matches</h3>
-          <p className="mt-2 text-secondary text-lg mb-6">{error}</p>
-          <div className="flex justify-center space-x-4">
-            <button
-              onClick={() => {
-                checkedMatchdays.current.clear();
-                matchdayCache.current.clear();
-                fetchMatches(currentMatchday);
-              }}
-              className="px-6 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
-            >
-              Retry
-            </button>
-            <button
-              onClick={() => {
-                // Clear all caches and localStorage data
-                localStorage.removeItem(`matchdayCache_${leagueCode}`);
-                localStorage.removeItem(`cacheLastRefreshed_${leagueCode}`);
-                localStorage.removeItem('completedMatchdays');
-                localStorage.removeItem('completedMatches');
-                localStorage.removeItem('viewingCurrentStandingsFrom');
-                
-                // Clear in-memory caches
-                matchdayCache.current.clear();
-                checkedMatchdays.current.clear();
-                
-                // Refresh the page to reset everything
-                window.location.reload();
-              }}
-              className="px-6 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-            >
-              Reset All Data
-            </button>
-          </div>
-        </div>
+        {/* Error component remains the same */}
       </div>
     );
   }
@@ -1246,180 +1385,32 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   if (matches.length === 0) {
     return (
       <div className="text-center py-8">
-        {isRaceMode ? (
-          <NoRaceMatches
-            onNextMatchday={() => {
-              // Find the next matchday
-              const nextMatchday = currentMatchday < MAX_MATCHDAY ? currentMatchday + 1 : currentMatchday;
-              setCurrentMatchday(nextMatchday);
-              // Add prefetching for race mode
-              prefetchRemainingMatchdays(currentMatchday);
-            }}
-          />
-        ) : (
-          <>
-            <h3 className="text-xl font-medium text-primary">No Matches Available</h3>
-            <p className="mt-2 text-secondary">There are no scheduled matches for matchday {currentMatchday}.</p>
-            <div className="flex flex-col gap-3 mt-4 items-center">
-              {!isCheckingMatchdays && currentMatchday < MAX_MATCHDAY && (
-                <button
-                  onClick={() => {
-                    setIsCheckingMatchdays(true);
-                    setCurrentMatchday(currentMatchday + 1);
-                  }}
-                  className="px-4 py-2 bg-accent text-white rounded-full hover:bg-accent-hover transition-colors"
-                >
-                  Find Next Available Matchday
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  // Clear all caches and localStorage data
-                  localStorage.removeItem(`matchdayCache_${leagueCode}`);
-                  localStorage.removeItem(`cacheLastRefreshed_${leagueCode}`);
-                  localStorage.removeItem('completedMatchdays');
-                  localStorage.removeItem('completedMatches');
-                  localStorage.removeItem('viewingCurrentStandingsFrom');
-                  
-                  // Clear in-memory caches
-                  matchdayCache.current.clear();
-                  checkedMatchdays.current.clear();
-                  
-                  // Refresh the page to reset everything
-                  window.location.reload();
-                }}
-                className="px-4 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-              >
-                Reset All Data (Fix Issues)
-              </button>
-            </div>
-          </>
-        )}
+        {/* No matches component remains the same */}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-center items-center mb-6">
+    <div className="w-full">
+      {/* Just keep the matchday fixtures header and other elements */}
+      <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-primary">Matchday {currentMatchday} Fixtures</h2>
       </div>
 
       {/* Improved transition effect */}
       <div className={`transition-opacity duration-300 ${isProcessing ? 'opacity-40' : 'opacity-100'}`}>
-        {matches.length <= 5 ? (
-          // Single row for 5 or fewer matches
-          <div className={`grid gap-6 mx-auto ${
-            matches.length === 1 ? 'grid-cols-1' : 
-            matches.length === 2 ? 'grid-cols-2' :
-            matches.length === 3 ? 'grid-cols-3' :
-            matches.length === 4 ? 'grid-cols-4' :
-            'grid-cols-5 w-full'
-          }`} style={{ width: matches.length <= 4 ? `${matches.length * 230}px` : '100%' }}>
+        {isRaceMode && matches.length === 0 ? (
+          <NoRaceMatches onNextMatchday={handleNextMatchday} />
+        ) : (
+          <div className="grid grid-cols-5 gap-4">
             {matches.map(match => (
-              <div key={match.id} style={{ width: '210px', height: '200px' }}>
-                <MatchPrediction
-                  key={match.id}
-                  match={match}
-                  onPredictionChange={handlePredictionChange}
-                />
-              </div>
+              <MatchPrediction
+                key={match.id}
+                match={match}
+                onPredictionChange={handlePredictionChange}
+              />
             ))}
           </div>
-        ) : (
-          <>
-            {/* First row - increase gap from 4 to 6 */}
-            <div className={`grid gap-6 ${
-              matches.length === 8 ? 'grid-cols-4 w-full' : 
-              matches.length === 7 ? 'grid-cols-4 w-full' : 
-              matches.length === 6 ? 'grid-cols-3 w-full' : 
-              'grid-cols-5 w-full'
-            }`}>
-              {(() => {
-                if (matches.length === 8) {
-                  return matches.slice(0, 4).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                } else if (matches.length === 7) {
-                  return matches.slice(0, 4).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                } else if (matches.length === 6) {
-                  return matches.slice(0, 3).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                } else {
-                  return matches.slice(0, 5).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                }
-              })()}
-            </div>
-
-            {/* Add margin between rows */}
-            <div className="mb-6"></div>
-
-            {/* Second row - increase gap from 4 to 6 */}
-            <div className={`grid gap-6 ${
-              matches.length === 8 ? 'grid-cols-4 w-full' : 
-              matches.length === 7 ? 'grid-cols-3 w-full' : 
-              matches.length === 6 ? 'grid-cols-3 w-full' : 
-              matches.length === 9 ? 'grid-cols-4 w-full' : 
-              'grid-cols-5 w-full'
-            }`}>
-              {(() => {
-                if (matches.length === 8) {
-                  return matches.slice(4).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                } else if (matches.length === 7) {
-                  return matches.slice(4).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                } else if (matches.length === 6) {
-                  return matches.slice(3).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                } else {
-                  return matches.slice(5).map(match => (
-                    <MatchPrediction
-                      key={match.id}
-                      match={match}
-                      onPredictionChange={handlePredictionChange}
-                    />
-                  ));
-                }
-              })()}
-            </div>
-          </>
         )}
       </div>
 

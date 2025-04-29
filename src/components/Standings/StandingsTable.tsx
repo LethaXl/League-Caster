@@ -1,11 +1,13 @@
 import { Standing } from '@/services/football-api';
 import Image from 'next/image';
+import { usePrediction } from '@/contexts/PredictionContext';
 
 interface StandingsTableProps {
   standings: Standing[];
   initialStandings?: Standing[];
   loading: boolean;
   leagueCode?: string;
+  selectedTeamIds?: number[];
 }
 
 // Helper function to get position change
@@ -107,7 +109,9 @@ function RelegationIndicator({ status, color }: { status: 'relegated' | 'playoff
   );
 }
 
-export default function StandingsTable({ standings, initialStandings, loading, leagueCode }: StandingsTableProps) {
+export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds }: StandingsTableProps) {
+  const { isRaceMode, tableDisplayMode } = usePrediction();
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
@@ -599,8 +603,19 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     );
   }
   
+  // Filter standings if in race mode with mini table mode AND selectedTeamIds are provided
+  let filteredStandings = [...standings];
+  if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+    filteredStandings = filteredStandings.filter(standing => 
+      selectedTeamIds.includes(standing.team.id)
+    );
+  } else {
+    // Always use full standings when not in race mode
+    filteredStandings = [...standings];
+  }
+  
   // Sort the standings by position to ensure correct display order
-  const sortedStandings = [...standings].sort((a, b) => a.position - b.position);
+  const sortedStandings = filteredStandings.sort((a, b) => a.position - b.position);
 
   return (
     <div className="overflow-x-auto rounded-lg">
@@ -629,10 +644,14 @@ export default function StandingsTable({ standings, initialStandings, loading, l
             const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
             const relegationStatus = getRelegationStatus(standing.position, leagueCode);
             
+            // Highlight selected teams in race mode with full table display
+            const isSelectedTeam = selectedTeamIds?.includes(standing.team.id);
+            const highlightRow = isRaceMode && tableDisplayMode === 'full' && isSelectedTeam;
+            
             return (
               <tr 
                 key={standing.team.id} 
-                className={`${index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} hover:bg-black/5 transition-colors duration-75`}
+                className={`${highlightRow ? 'bg-[#f7e479]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} hover:bg-black/5 transition-colors duration-75`}
               >
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-primary w-24">
                   <div className="flex">
