@@ -935,6 +935,14 @@ export default function Home() {
                   {isViewingStandings && !loading && viewingFromMatchday && (
                     <button
                       onClick={() => {
+                        // Clear the initialFetchDone flag for this league to allow a fresh fetch
+                        if (selectedLeague) {
+                          localStorage.removeItem(`${selectedLeague}_initialFetchDone`);
+                        }
+                        
+                        // Clear initialMatches to ensure fresh data
+                        setInitialMatches([]);
+                        
                         // Get completed matchdays
                         const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
                         const currentCompleted = completedMatchdays[selectedLeague] || [];

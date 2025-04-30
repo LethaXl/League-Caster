@@ -494,6 +494,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   // Load cached data from localStorage on mount
   useEffect(() => {
+    // Always reset loading state when component mounts
+    setLoading(false);
+    
     const now = new Date();
     const savedCache = localStorage.getItem(`matchdayCache_${leagueCode}`);
     const savedTimestamp = localStorage.getItem(`cacheLastRefreshed_${leagueCode}`);
@@ -570,7 +573,17 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   useEffect(() => {
     fetchMatches(currentMatchday);
-  }, [leagueCode, currentMatchday, fetchMatches]);
+    
+    // Safety timeout to prevent infinite loading
+    const safetyTimer = setTimeout(() => {
+      if (loading) {
+        console.log('Safety timeout triggered - resetting loading state');
+        setLoading(false);
+      }
+    }, 20000); // 20 seconds
+    
+    return () => clearTimeout(safetyTimer);
+  }, [leagueCode, currentMatchday, fetchMatches, loading, setLoading]);
 
   const handlePredictionChange = (
     matchId: number,
