@@ -60,7 +60,6 @@ export default function Home() {
     selectedTeamIds,
     isRaceMode,
     setUnfilteredMatchesMode,
-    tableDisplayMode,
     setTableDisplayMode
   } = usePrediction();
 
@@ -68,7 +67,7 @@ export default function Home() {
   const maxMatchday = selectedLeague ? getMaxMatchday(selectedLeague) : 38;
   
   // Check if we're at the final matchday for the current league
-  const isFinalMatchday = currentMatchday >= maxMatchday;
+  // const isFinalMatchday = currentMatchday >= maxMatchday;
 
   // Check for the current view state when isViewingStandings changes
   useEffect(() => {

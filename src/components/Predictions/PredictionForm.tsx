@@ -40,8 +40,6 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const [predictions, setPredictions] = useState<Map<number, Prediction>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCheckingMatchdays, setIsCheckingMatchdays] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
   // Get the maximum matchday for this league
@@ -71,7 +69,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const shouldRefreshCache = useCallback((): boolean => {
     const now = Date.now();
     return now - cacheLastRefreshed.current > CACHE_EXPIRY_TIME;
-  }, []);
+  }, [CACHE_EXPIRY_TIME]);
 
   // Function to clear the cache and force a refresh
   const clearCache = useCallback(() => {

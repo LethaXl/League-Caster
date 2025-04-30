@@ -8,7 +8,7 @@ interface ModeSelectionProps {
   onModeSelect: (mode: 'normal' | 'race', selectedTeams?: number[], unfilteredMatchesMode?: 'auto' | 'draws', tableDisplayMode?: 'mini' | 'full') => void;
 }
 
-export default function ModeSelection({ leagueCode, standings, onModeSelect }: ModeSelectionProps) {
+export default function ModeSelection({ standings, onModeSelect }: ModeSelectionProps) {
   const [mode, setMode] = useState<'normal' | 'race' | null>(null);
   const [selectedTeams, setSelectedTeams] = useState<number[]>([]);
   const [unfilteredMatchesMode, setUnfilteredMatchesMode] = useState<'auto' | 'draws'>('auto');
