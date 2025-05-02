@@ -5,6 +5,7 @@ import LeagueSelector from '@/components/Standings/LeagueSelector';
 import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
 import ModeSelection from '@/components/Predictions/ModeSelection';
+import PredictionSummary from '@/components/Predictions/PredictionSummary';
 import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
@@ -40,6 +41,9 @@ export default function Home() {
   const [showPredictions, setShowPredictions] = useState(false);
   const [showModeSelection, setShowModeSelection] = useState(false);
   const [viewingFromMatchday, setViewingFromMatchday] = useState<number | null>(null);
+  const [showPredictionSummary, setShowPredictionSummary] = useState(false);
+  const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
+  const [matchPredictions, setMatchPredictions] = useState<Map<number, any>>(new Map());
   
   // Cache for API data to reduce calls
   const matchdayCache = useRef<Map<string, number>>(new Map());
@@ -47,6 +51,8 @@ export default function Home() {
   const standingsCache = useRef<Map<string, Standing[]>>(new Map());
   // Add state to pass fetched matches to PredictionForm
   const [initialMatches, setInitialMatches] = useState<Match[]>([]);
+  // Add initialization flag to track if a reset has been done on this session
+  const initializedRef = useRef(false);
 
   const {
     isViewingStandings,
@@ -62,6 +68,24 @@ export default function Home() {
     setUnfilteredMatchesMode,
     setTableDisplayMode
   } = usePrediction();
+
+  // Ensure race mode settings are reset on initial load
+  useEffect(() => {
+    // Only execute this once per session
+    if (!initializedRef.current) {
+      console.log("Initial app load - resetting race mode settings");
+      
+      // Reset race mode settings to ensure clean initial state
+      setIsRaceMode(false);
+      setSelectedTeamIds([]);
+      
+      // Clear race mode related localStorage items
+      localStorage.removeItem('predictionState');
+      
+      // Mark as initialized
+      initializedRef.current = true;
+    }
+  }, [setIsRaceMode, setSelectedTeamIds]);
 
   // Determine the max matchday for the currently selected league
   const maxMatchday = selectedLeague ? getMaxMatchday(selectedLeague) : 38;
@@ -210,8 +234,15 @@ export default function Home() {
   const handleStartPredictions = async () => {
     if (!selectedLeague) return;
     
+    // Reset all race mode settings when starting predictions
+    setIsRaceMode(false);
+    setSelectedTeamIds([]);
+    
     // Clear the initialFetchDone flag for this league
     localStorage.removeItem(`${selectedLeague}_initialFetchDone`);
+    
+    // Clear any saved prediction state for a clean start
+    localStorage.removeItem('predictionState');
     
     setLoading(true);
     setError(null);
@@ -327,16 +358,30 @@ export default function Home() {
     unfilteredMatchesMode?: 'auto' | 'draws',
     tableDisplayMode?: 'mini' | 'full'
   ) => {
+    console.log(`Mode selected: ${mode}`);
+    
     if (mode === 'normal') {
+      console.log("Setting Classic Mode - resetting race mode settings");
       setIsRaceMode(false);
       setSelectedTeamIds([]);
+      // Ensure unfiltered mode is reset too
+      setUnfilteredMatchesMode('auto');
+      // Reset table display mode
+      setTableDisplayMode('mini');
+      
+      // Force clear any problematic storage that might be affecting filtering
+      localStorage.removeItem(`${selectedLeague}_initialFetchDone`);
+      console.log("Classic Mode: Cleared initialFetchDone flag to ensure fresh data load");
     } else if (mode === 'race' && selectedTeams && selectedTeams.length > 0) {
+      console.log(`Setting Race Mode with ${selectedTeams.length} teams selected`);
       setIsRaceMode(true);
       setSelectedTeamIds(selectedTeams);
       if (unfilteredMatchesMode) {
+        console.log(`Setting unfiltered matches mode to: ${unfilteredMatchesMode}`);
         setUnfilteredMatchesMode(unfilteredMatchesMode);
       }
       if (tableDisplayMode) {
+        console.log(`Setting table display mode to: ${tableDisplayMode}`);
         setTableDisplayMode(tableDisplayMode);
       }
     }
@@ -344,6 +389,129 @@ export default function Home() {
     setShowPredictions(true);
     setShowModeSelection(false);
   };
+
+  // Function to collect completed matches for the prediction summary
+  const collectCompletedMatches = useCallback(() => {
+    if (!selectedLeague) return;
+    
+    // Get completed match IDs from localStorage
+    const completedMatchesData = JSON.parse(localStorage.getItem('completedMatches') || '{}');
+    const completedIds = completedMatchesData[selectedLeague] || [];
+    
+    if (completedIds.length === 0) {
+      console.log("No completed matches found for this league");
+      return;
+    }
+    
+    // Get all completed matchdays from localStorage
+    const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
+    const matchdaysList = completedMatchdays[selectedLeague] || [];
+    
+    console.log("Completed matchdays from localStorage:", matchdaysList);
+    
+    if (matchdaysList.length === 0) {
+      console.log("No completed matchdays found in localStorage");
+    }
+
+    // We'll collect matches from each matchday
+    const allMatches: Match[] = [];
+    const predictionsMap = new Map();
+    
+    // Try to get saved predictions from localStorage
+    const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${selectedLeague}`) || '{}');
+    console.log("Saved predictions:", savedPredictions);
+    
+    // For each completed matchday, try to find the matches in the cache
+    matchdaysList.forEach((matchday: number) => {
+      console.log(`Looking for matches in matchday ${matchday}`);
+      
+      // Try the standard string format for cache key
+      const cacheKey = `${selectedLeague}_md${matchday}`;
+      
+      if (matchesCache.current.has(cacheKey)) {
+        console.log(`Found matches using cache key: ${cacheKey}`);
+        
+        const matchdayMatches = matchesCache.current.get(cacheKey)!;
+        
+        // Only include matches that are in completedIds
+        const filteredMatches = matchdayMatches.filter(m => completedIds.includes(m.id));
+        console.log(`Found ${filteredMatches.length} completed matches for matchday ${matchday}`);
+        
+        // Make sure matchday property is set correctly
+        filteredMatches.forEach(match => {
+          // Always set matchday explicitly
+          match.matchday = matchday;
+          
+          // Apply the saved prediction if available
+          const savedPrediction = savedPredictions[match.id];
+          if (savedPrediction) {
+            predictionsMap.set(match.id, savedPrediction);
+          } else {
+            // Fallback to default prediction if no saved prediction found
+            predictionsMap.set(match.id, {
+              matchId: match.id,
+              type: 'home' // Default to home win instead of draw
+            });
+          }
+        });
+        
+        // Add to all matches
+        allMatches.push(...filteredMatches);
+      } else {
+        console.log(`No matches found in cache for matchday ${matchday}`);
+        
+        // If we don't have matches in the cache, try to get them from localStorage
+        try {
+          const storedMatches = localStorage.getItem(`${selectedLeague}_md${matchday}_all`);
+          
+          if (storedMatches) {
+            console.log(`Found matches in localStorage for matchday ${matchday}`);
+            const parsedMatches = JSON.parse(storedMatches) as Match[];
+            
+            // Only include matches that are in completedIds
+            const filteredMatches = parsedMatches.filter(m => completedIds.includes(m.id));
+            console.log(`Found ${filteredMatches.length} completed matches from localStorage for matchday ${matchday}`);
+            
+            // Make sure matchday property is set correctly
+            filteredMatches.forEach(match => {
+              // Always set matchday explicitly
+              match.matchday = matchday;
+              
+              // Apply the saved prediction if available
+              const savedPrediction = savedPredictions[match.id];
+              if (savedPrediction) {
+                predictionsMap.set(match.id, savedPrediction);
+              } else {
+                // Fallback to default prediction if no saved prediction found
+                predictionsMap.set(match.id, {
+                  matchId: match.id,
+                  type: 'home' // Default to home win instead of draw
+                });
+              }
+            });
+            
+            // Add to all matches
+            allMatches.push(...filteredMatches);
+          }
+        } catch (e) {
+          console.error(`Error retrieving matches from localStorage for matchday ${matchday}:`, e);
+        }
+      }
+    });
+    
+    console.log(`Collected ${allMatches.length} matches across ${new Set(allMatches.map(m => m.matchday)).size} matchdays`);
+    console.log("Matchdays in collected matches:", [...new Set(allMatches.map(m => m.matchday))]);
+    
+    // Set the collected matches and predictions
+    setCompletedMatches(allMatches);
+    setMatchPredictions(predictionsMap);
+  }, [selectedLeague, maxMatchday]);
+
+  // Handle showing prediction summary
+  const handleShowPredictionSummary = useCallback(() => {
+    collectCompletedMatches();
+    setShowPredictionSummary(true);
+  }, [collectCompletedMatches]);
 
   if (error) {
     return (
@@ -931,6 +1099,16 @@ export default function Home() {
                     : 'Current Standings'}
                 </h2>
                 <div className="flex space-x-4">
+                  {/* Show Prediction Summary button for race mode at final matchday */}
+                  {isRaceMode && isViewingStandings && 
+                   (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) && (
+                    <button
+                      onClick={handleShowPredictionSummary}
+                      className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+                    >
+                      Show Summary
+                    </button>
+                  )}
                   {isViewingStandings && !loading && viewingFromMatchday && (
                     <button
                       onClick={() => {
@@ -997,6 +1175,20 @@ export default function Home() {
               initialMatches={initialMatches}
             />
           </div>
+        )}
+        
+        {/* Prediction Summary Modal */}
+        {showPredictionSummary && (
+          <PredictionSummary
+            predictions={matchPredictions}
+            matches={completedMatches}
+            selectedTeamIds={selectedTeamIds}
+            standings={predictedStandings}
+            onClose={() => {
+              setShowPredictionSummary(false);
+              // No need to clear matches/predictions since we might want to show them again
+            }}
+          />
         )}
       </div>
     </main>

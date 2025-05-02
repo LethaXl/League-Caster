@@ -604,13 +604,25 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   }
   
   // Filter standings if in race mode with mini table mode AND selectedTeamIds are provided
+  console.log("StandingsTable - Race mode state:", isRaceMode, "TableDisplayMode:", tableDisplayMode, "SelectedTeamIds:", selectedTeamIds?.length || 0);
+
   let filteredStandings = [...standings];
-  if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+  // Only filter if ALL conditions are met:
+  // 1. Race mode is explicitly enabled
+  // 2. Table display mode is set to mini
+  // 3. We have selected team IDs
+  // 4. There are actually teams selected
+  if (isRaceMode === true && 
+      tableDisplayMode === 'mini' && 
+      selectedTeamIds && 
+      selectedTeamIds.length > 0) {
+    console.log("Filtering standings to show only selected teams");
     filteredStandings = filteredStandings.filter(standing => 
       selectedTeamIds.includes(standing.team.id)
     );
   } else {
-    // Always use full standings when not in race mode
+    // Always use full standings when not in race mode or conditions aren't met
+    console.log("Showing full standings table");
     filteredStandings = [...standings];
   }
   

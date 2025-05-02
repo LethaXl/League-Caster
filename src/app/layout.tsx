@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { PredictionProvider } from "@/contexts/PredictionContext";
+import InitialStateCleaner from '@/components/InitialStateCleaner';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <PredictionProvider>
+          <InitialStateCleaner />
           {children}
         </PredictionProvider>
       </body>

@@ -48,7 +48,7 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
       {!showUnfilteredOptions ? (
         <>
           <div className="flex justify-center items-center mb-6">
-            <h2 className="text-2xl font-bold text-primary">Select Prediction Mode</h2>
+            <h2 className="text-2xl font-bold text-primary">Select Forecast Mode</h2>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

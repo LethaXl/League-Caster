@@ -63,17 +63,33 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     // Only save when we have actual prediction data
     if (predictedStandings.length > 0) {
-      const state = {
-        matchday: currentMatchday,
-        standings: predictedStandings,
-        isRace: isRaceMode,
-        teamIds: selectedTeamIds,
-        unfilteredMode: unfilteredMatchesMode,
-        tableMode: tableDisplayMode,
-      };
-      
-      localStorage.setItem('predictionState', JSON.stringify(state));
-      console.log('Saved prediction state to localStorage', state);
+      // For race mode, we want to fully persist the state
+      if (isRaceMode) {
+        const state = {
+          matchday: currentMatchday,
+          standings: predictedStandings,
+          isRace: isRaceMode,
+          teamIds: selectedTeamIds,
+          unfilteredMode: unfilteredMatchesMode,
+          tableMode: tableDisplayMode,
+        };
+        
+        localStorage.setItem('predictionState', JSON.stringify(state));
+        console.log('Saved complete prediction state to localStorage (race mode)');
+      } else {
+        // For classic mode, only save standings and matchday, not race settings
+        const state = {
+          matchday: currentMatchday,
+          standings: predictedStandings,
+          isRace: false,
+          teamIds: [],
+          unfilteredMode: 'auto', 
+          tableMode: 'mini'
+        };
+        
+        localStorage.setItem('predictionState', JSON.stringify(state));
+        console.log('Saved minimal prediction state to localStorage (classic mode)');
+      }
     }
   }, [currentMatchday, predictedStandings, isRaceMode, selectedTeamIds, unfilteredMatchesMode, tableDisplayMode]);
 
@@ -90,6 +106,16 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
     // Also clear completed matchdays for all leagues
     localStorage.removeItem('completedMatchdays');
     localStorage.removeItem('completedMatches');
+    
+    // Clear matchday cache for all leagues to ensure fresh data load
+    ['PL', 'BL1', 'FL1', 'SA', 'PD'].forEach(league => {
+      localStorage.removeItem(`${league}_initialFetchDone`);
+      localStorage.removeItem(`matchdayCache_${league}`);
+      localStorage.removeItem(`cacheLastRefreshed_${league}`);
+      console.log(`Cleared cache for ${league} during reset`);
+    });
+    
+    console.log("All prediction data and cache cleared");
   };
 
   return (

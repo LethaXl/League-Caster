@@ -13,6 +13,7 @@ const getDisplayName = (name: string): string => {
   if (name === 'RCD Espanyol de Barcelona') return 'RCD Espanyol';
   if (name === 'Club Atlético de Madrid') return 'Atletico Madrid';
   if (name === 'Brighton & Hove Albion FC') return 'Brighton & Hove Albion';
+  if (name === 'Real Sociedad de Fútbol') return 'Real Sociedad';
   return name;
 };
 

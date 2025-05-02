@@ -102,11 +102,19 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   // Function to filter matches for race mode (only including selected teams)
   const filterMatchesForRaceMode = useCallback((matches: Match[]): Match[] => {
+    // Add debugging information
+    console.log("Filter matches for race mode called");
+    console.log("isRaceMode:", isRaceMode);
+    console.log("selectedTeamIds:", selectedTeamIds);
+    
     if (!isRaceMode || selectedTeamIds.length === 0) {
+      console.log("Not filtering matches - race mode disabled or no teams selected");
       return matches;
     }
     
-    return matches.filter(match => {
+    console.log(`Filtering ${matches.length} matches for race mode with ${selectedTeamIds.length} teams`);
+    
+    const filteredMatches = matches.filter(match => {
       const homeTeamId = match.homeTeam.id;
       const awayTeamId = match.awayTeam.id;
       
@@ -123,6 +131,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // Include the match only if at least one of the teams is in the selected teams
       return isHomeTeamSelected || isAwayTeamSelected;
     });
+    
+    console.log(`Filtered matches from ${matches.length} to ${filteredMatches.length}`);
+    return filteredMatches;
   }, [isRaceMode, selectedTeamIds]);
 
   // Function to filter out the problematic Villarreal vs Espanyol match
@@ -240,6 +251,15 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         // Filter matches appropriately
         let filteredMatches = filterLaLigaProblematicMatches(cachedData, matchday);
         filteredMatches = filterAlreadyPlayedMatches(filteredMatches);
+        
+        // Log race mode settings before applying filter
+        console.log(`Using cached data for matchday ${matchday} with race mode: ${isRaceMode ? 'enabled' : 'disabled'}`);
+        console.log(`Race mode settings: ${JSON.stringify({
+          isRaceMode,
+          selectedTeamIds,
+          unfilteredMatchesMode
+        })}`);
+        
         filteredMatches = filterMatchesForRaceMode(filteredMatches);
         
         setMatches(filteredMatches);
@@ -283,6 +303,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         
         // Apply filter for already played matches
         unpredictedMatches = filterAlreadyPlayedMatches(unpredictedMatches);
+        
+        // Log race mode settings before applying filter
+        console.log(`Using initial matches for matchday ${matchday} with race mode: ${isRaceMode ? 'enabled' : 'disabled'}`);
+        console.log(`Race mode settings: ${JSON.stringify({
+          isRaceMode,
+          selectedTeamIds,
+          unfilteredMatchesMode
+        })}`);
         
         // Apply race mode filter if enabled
         unpredictedMatches = filterMatchesForRaceMode(unpredictedMatches);
@@ -499,6 +527,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     const savedCache = localStorage.getItem(`matchdayCache_${leagueCode}`);
     const savedTimestamp = localStorage.getItem(`cacheLastRefreshed_${leagueCode}`);
     
+    // Log race mode state on component mount/update
+    console.log(`PredictionForm useEffect - race mode state: ${isRaceMode ? 'enabled' : 'disabled'}`);
+    console.log(`Current selectedTeamIds: ${JSON.stringify(selectedTeamIds)}`);
+    
     // Force clear the cache once to ensure team name mappings are applied
     // We'll use a flag in localStorage to track if we've already cleared for this league
     const nameMapClearedKey = `teamNameMappingCleared_${leagueCode}`;
@@ -549,17 +581,6 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         
         // Save the updated cache back to localStorage
         saveCache();
-        
-        // Disabling automatic prefetching to prevent unwanted API calls
-        /* Original code commented out
-        // If there's no prefetching in progress, initiate prefetching
-        if (!localStorage.getItem(`prefetching_${leagueCode}`)) {
-          // Add a slight delay to ensure the initial fetch completes first
-          setTimeout(() => {
-            prefetchRemainingMatchdays(currentMatchday);
-          }, 1000);
-        }
-        */
       } catch (e) {
         console.error("Error parsing cache:", e);
       }
@@ -567,9 +588,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     
     // Fetch data for the current matchday
     fetchMatches(currentMatchday);
-  }, [leagueCode, currentMatchday, fetchMatches, saveCache, shouldRefreshCache, clearCache, prefetchRemainingMatchdays]);
+  }, [leagueCode, currentMatchday, fetchMatches, saveCache, shouldRefreshCache, clearCache, isRaceMode, selectedTeamIds]);
 
   useEffect(() => {
+    console.log(`Running matchday update effect - race mode: ${isRaceMode ? 'enabled' : 'disabled'}, teams: ${selectedTeamIds.length}`);
+    
+    // Clear initialFetchDone flag to ensure proper filtering is applied
+    localStorage.removeItem(`${leagueCode}_initialFetchDone`);
+    
     fetchMatches(currentMatchday);
     
     // Safety timeout to prevent infinite loading
@@ -581,7 +607,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     }, 20000); // 20 seconds
     
     return () => clearTimeout(safetyTimer);
-  }, [leagueCode, currentMatchday, fetchMatches, loading, setLoading]);
+  }, [leagueCode, currentMatchday, fetchMatches, loading, setLoading, isRaceMode, selectedTeamIds]);
 
   const handlePredictionChange = (
     matchId: number,
@@ -596,6 +622,16 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         type,
         ...(type === 'custom' && { homeGoals, awayGoals })
       });
+      
+      // Save prediction to localStorage
+      const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${leagueCode}`) || '{}');
+      savedPredictions[matchId] = {
+        matchId,
+        type,
+        ...(type === 'custom' && { homeGoals, awayGoals })
+      };
+      localStorage.setItem(`predictions_${leagueCode}`, JSON.stringify(savedPredictions));
+      
       return newPredictions;
     });
   };
@@ -700,6 +736,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     // First phase: visual fading without full loading state
     setIsProcessing(true);
     
+    // Log current race mode settings before handling predictions
+    console.log(`Submitting predictions with race mode: ${isRaceMode ? 'enabled' : 'disabled'}`);
+    console.log(`Race mode settings on submit: ${JSON.stringify({
+      isRaceMode,
+      selectedTeamIds: selectedTeamIds,
+      matchCount: matches.length
+    })}`);
+    
     // Process data with visual indication but without triggering loading spinner
     let updatedStandings = [...predictedStandings];
 
@@ -716,14 +760,59 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       if (!completedMatches[leagueCode].includes(match.id)) {
         completedMatches[leagueCode].push(match.id);
       }
+      
+      // Ensure matchday property is set correctly for each match and save to localStorage
+      match.matchday = currentMatchday;
+      
+      // Store each match in localStorage for later retrieval
+      try {
+        // Get existing matches for this matchday
+        const matchdayKey = `${leagueCode}_md${currentMatchday}_all`;
+        const storedMatches = JSON.parse(localStorage.getItem(matchdayKey) || '[]');
+        
+        // Check if this match is already stored
+        const matchIndex = storedMatches.findIndex((m: Match) => m.id === match.id);
+        
+        if (matchIndex >= 0) {
+          // Update the existing match
+          storedMatches[matchIndex] = {
+            ...storedMatches[matchIndex],
+            matchday: currentMatchday
+          };
+        } else {
+          // Add the new match with matchday information
+          storedMatches.push({
+            ...match,
+            matchday: currentMatchday
+          });
+        }
+        
+        // Save back to localStorage
+        localStorage.setItem(matchdayKey, JSON.stringify(storedMatches));
+      } catch (e) {
+        console.error("Error storing match data in localStorage", e);
+      }
     });
     
     // Update completed matchdays
-    completedMatchdays[leagueCode] = [...(completedMatchdays[leagueCode] || []), currentMatchday];
+    completedMatchdays[leagueCode] = [...new Set([...(completedMatchdays[leagueCode] || []), currentMatchday])];
     
     // Save both to localStorage
     localStorage.setItem('completedMatchdays', JSON.stringify(completedMatchdays));
     localStorage.setItem('completedMatches', JSON.stringify(completedMatches));
+    
+    // Store the current predictions
+    const currentPredictions: Record<string, Prediction> = {};
+    predictions.forEach((prediction, matchId) => {
+      currentPredictions[matchId.toString()] = prediction;
+    });
+    
+    // Update the saved predictions
+    const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${leagueCode}`) || '{}');
+    localStorage.setItem(`predictions_${leagueCode}`, JSON.stringify({
+      ...savedPredictions,
+      ...currentPredictions
+    }));
 
     // Process predictions and update standings
     matches.forEach(match => {
