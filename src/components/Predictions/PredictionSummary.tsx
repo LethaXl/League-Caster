@@ -19,7 +19,11 @@ export default function PredictionSummary({
   onClose 
 }: PredictionSummaryProps) {
   // Add debugging to see what data we're getting
-  const [matchdayData, setMatchdayData] = useState<any>({
+  const [matchdayData, setMatchdayData] = useState<{
+    matchCount: number;
+    matchdays: number[];
+    predictionsCount: number;
+  }>({
     matchCount: matches.length,
     matchdays: [...new Set(matches.map(m => m.matchday))],
     predictionsCount: predictions.size

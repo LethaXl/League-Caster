@@ -9,6 +9,7 @@ import PredictionSummary from '@/components/Predictions/PredictionSummary';
 import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
+import { Prediction } from '@/types/predictions';
 
 // Interface for API error responses
 interface ApiError {
@@ -43,7 +44,7 @@ export default function Home() {
   const [viewingFromMatchday, setViewingFromMatchday] = useState<number | null>(null);
   const [showPredictionSummary, setShowPredictionSummary] = useState(false);
   const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
-  const [matchPredictions, setMatchPredictions] = useState<Map<number, any>>(new Map());
+  const [matchPredictions, setMatchPredictions] = useState<Map<number, Prediction>>(new Map());
   
   // Cache for API data to reduce calls
   const matchdayCache = useRef<Map<string, number>>(new Map());
