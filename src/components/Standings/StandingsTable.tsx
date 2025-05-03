@@ -634,20 +634,20 @@ export default function StandingsTable({ standings, initialStandings, loading, l
       <table className="min-w-full">
         <thead>
           <tr>
-            <th className="px-6 py-4 text-xs font-semibold text-secondary uppercase tracking-wider w-24 border-b border-card-border/50">
+            <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider w-24 border-b border-card-border/50">
               <div className="flex">
                 <span className="w-8 text-center">Pos</span>
                 <span className="w-2"></span>
                 <span className="w-8"></span>
               </div>
             </th>
-            <th className="px-6 py-4 text-left text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Team</th>
-            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">P</th>
-            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">W</th>
-            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">D</th>
-            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">L</th>
-            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">GD</th>
-            <th className="px-6 py-4 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Pts</th>
+            <th className="px-6 py-3 text-left text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Team</th>
+            <th className="px-6 py-3 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">P</th>
+            <th className="px-6 py-3 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">W</th>
+            <th className="px-6 py-3 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">D</th>
+            <th className="px-6 py-3 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">L</th>
+            <th className="px-6 py-3 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">GD</th>
+            <th className="px-6 py-3 text-center text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">Pts</th>
           </tr>
         </thead>
         <tbody>
@@ -665,7 +665,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                 key={standing.team.id} 
                 className={`${highlightRow ? 'bg-[#f7e479]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} hover:bg-black/5 transition-colors duration-75`}
               >
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary w-24">
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-primary w-24">
                   <div className="flex">
                     <span className="w-8 text-center">{standing.position}</span>
                     <span className="w-2 flex items-center justify-center">
@@ -676,9 +676,9 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                     </span>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-6 py-2 whitespace-nowrap">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 h-8 w-8 relative">
+                    <div className="flex-shrink-0 h-6 w-6 relative">
                       <Image
                         src={standing.team.crest || "/placeholder-team.png"}
                         alt={standing.team.name}
@@ -692,14 +692,14 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.playedGames}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.won}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.draw}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">{standing.lost}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-primary text-center">
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-primary text-center">{standing.playedGames}</td>
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-primary text-center">{standing.won}</td>
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-primary text-center">{standing.draw}</td>
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-primary text-center">{standing.lost}</td>
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-primary text-center">
                   {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-primary text-center">{standing.points}</td>
+                <td className="px-6 py-2 whitespace-nowrap text-sm font-bold text-primary text-center">{standing.points}</td>
               </tr>
             );
           })}
