@@ -34,6 +34,15 @@ const getMaxMatchday = (leagueCode: string): number => {
   return 38;
 };
 
+// League info for header (copied from LeagueSelector)
+const LEAGUES = [
+  { code: 'PL', name: 'Premier League', country: 'England', flag: '🏴', image: '/premierleague.png' },
+  { code: 'BL1', name: 'Bundesliga', country: 'Germany', flag: '🇩🇪', image: '/bundesliga.png' },
+  { code: 'FL1', name: 'Ligue 1', country: 'France', flag: '🇫🇷', image: '/ligue1.png' },
+  { code: 'SA', name: 'Serie A', country: 'Italy', flag: '🇮🇹', image: '/seriea.png' },
+  { code: 'PD', name: 'La Liga', country: 'Spain', flag: '🇪🇸', image: '/laliga.png' },
+];
+
 export default function Home() {
   const [selectedLeague, setSelectedLeague] = useState<string | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -547,7 +556,7 @@ export default function Home() {
     
     return (
       <main className="min-h-screen bg-background overflow-hidden">
-        <div className="max-w-7xl mx-auto px-8 pt-8">
+        <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-8 pt-8">
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold text-primary mb-4">League Caster</h1>
             <p className="text-large text-secondary">Select a league to view standings and start forecasting</p>
@@ -556,7 +565,7 @@ export default function Home() {
         <div className="w-full">
           <LeagueSelector onLeagueSelect={setSelectedLeague} />
         </div>
-        <div className="max-w-7xl mx-auto px-8">
+        <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-8">
           <div className="text-center mt-10 text-white font-medium text-lg">
             Season 2024/2025
             <div className="mt-1 text-xs text-gray-400">Last Updated: {formattedDate}</div>
@@ -1062,11 +1071,29 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen p-8 bg-background">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen w-full pt-6 pb-1 sm:p-8 bg-background">
+      <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-0">
         <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-primary">League Standings</h1>
+          <div className="ml-6 sm:ml-0">
+            <h1 className="text-xl xs:text-2xl sm:text-3xl md:text-4xl font-bold text-primary">
+              {selectedLeague && (
+                (() => {
+                  const league = LEAGUES.find(l => l.code === selectedLeague);
+                  if (!league) return null;
+                  return (
+                    <div className="flex items-center gap-2 sm:gap-4">
+                      <img
+                        src={league.image}
+                        alt={league.name}
+                        className="w-12 h-12 xs:w-15 xs:h-15 sm:w-19 sm:h-19 md:w-23 md:h-23 object-contain"
+                        style={{ maxWidth: '3.5rem', maxHeight: '3.5rem' }} 
+                      />
+                      <span className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-primary">{league.name}</span>
+                    </div>
+                  );
+                })()
+              )}
+            </h1>
             <button
               onClick={() => {
                 // Clear the initialFetchDone flags for all leagues
@@ -1081,7 +1108,7 @@ export default function Home() {
                 // Reset race mode when returning to league selection
                 resetPredictions();
               }}
-              className="mt-2 text-accent hover:text-accent-hover transition-transform hover:scale-105"
+              className="mt-1 text-xs xs:text-sm text-accent hover:text-accent-hover transition-transform hover:scale-105"
             >
               ← Back to leagues
             </button>
@@ -1089,15 +1116,33 @@ export default function Home() {
         </div>
 
         {(!showPredictions && !showModeSelection) || isViewingStandings ? (
-          <div className="bg-card rounded-lg p-6">
+          <div className="bg-card rounded-lg p-2 sm:p-6 my-6 sm:my-10 ml-1 mr-1 sm:ml-0">
             <div className="mb-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                <h2 className="text-2xl font-bold text-primary mb-2 sm:mb-0">
+              <div className="flex flex-row justify-between items-center mb-2 sm:mb-4 gap-2 sm:gap-4">
+                <h2
+                  className={
+                    `text-base sm:text-xl font-semibold sm:font-bold text-primary ` +
+                    ((isViewingStandings || viewingFromMatchday) && (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) ? 'text-center w-full mx-auto my-0' : 'mb-2 sm:mb-0')
+                  }
+                >
                   {isViewingStandings || viewingFromMatchday 
                     ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
                       ? 'Final Table' 
-                      : `Standings after Matchday ${viewingFromMatchday || (currentMatchday > 1 ? currentMatchday - 1 : 1)}`
-                    : 'Current Standings'}
+                      : (
+                          <span className="flex flex-col">
+                            <span>Standings after</span>
+                            <span>Matchday {viewingFromMatchday || (currentMatchday > 1 ? currentMatchday - 1 : 1)}</span>
+                          </span>
+                        )
+                    : (
+                        <>
+                          <span className="flex flex-col items-center ml-4 sm:ml-0 sm:hidden text-base font-semibold mt-2">
+                            <span className="text-center">Current</span>
+                            <span className="text-center">Standings</span>
+                          </span>
+                          <span className="hidden sm:inline">Current Standings</span>
+                        </>
+                      )}
                 </h2>
                 <div className="flex space-x-4">
                   {/* Show Prediction Summary button for race mode at final matchday */}
@@ -1105,7 +1150,7 @@ export default function Home() {
                    (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) && (
                     <button
                       onClick={handleShowPredictionSummary}
-                      className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+                      className="px-4 xs:px-6 sm:px-8 py-1.5 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold text-sm sm:text-base"
                     >
                       Show Summary
                     </button>
@@ -1138,7 +1183,7 @@ export default function Home() {
                         setShowModeSelection(false);
                         setViewingFromMatchday(null);
                       }}
-                      className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+                      className="px-4 xs:px-6 sm:px-8 py-1.5 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold text-sm sm:text-base"
                     >
                       Back to Predictions
                     </button>
@@ -1146,9 +1191,12 @@ export default function Home() {
                   {!isViewingStandings && (
                     <button
                       onClick={handleStartPredictions}
-                      className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+                      className="px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-base bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
                     >
-                      Start Forecasting
+                      <span className="block sm:hidden">
+                        Start<br />Forecasting
+                      </span>
+                      <span className="hidden sm:inline">Start Forecasting</span>
                     </button>
                   )}
                 </div>
