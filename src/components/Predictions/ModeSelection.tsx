@@ -44,60 +44,60 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
   };
 
   return (
-    <div className="bg-card rounded-lg p-6">
+    <div className="bg-card rounded-lg p-4 sm:p-6">
       {!showUnfilteredOptions ? (
         <>
-          <div className="flex justify-center items-center mb-6">
-            <h2 className="text-2xl font-bold text-primary">Select Forecast Mode</h2>
+          <div className="flex justify-center items-center mb-4 sm:mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-primary">Select Forecast Mode</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-6 sm:mb-8 md:grid-cols-2">
             {/* Normal Mode */}
             <div 
-              className={`bg-[#111111] rounded-lg p-6 border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${mode === 'normal' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
+              className={`bg-[#111111] rounded-lg p-4 sm:p-6 border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${mode === 'normal' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
               onClick={() => setMode('normal')}
             >
-              <h3 className="text-xl font-bold text-[#f7e479] mb-3 text-center">Classic Mode</h3>
-              <p className="text-secondary mb-2">
+              <h3 className="text-lg sm:text-xl font-bold text-[#f7e479] mb-2 sm:mb-3 text-center">Classic Mode</h3>
+              <p className="text-xs sm:text-base text-secondary mb-1 sm:mb-2">
                 Forecast all fixtures for each matchday in the league, predicting every match outcome.
               </p>
-              <p className="text-secondary mb-4">
+              <p className="text-xs sm:text-base text-secondary mb-2 sm:mb-4">
                 See how your predictions affect the entire league table throughout the season.
               </p>
             </div>
             
             {/* Race Mode */}
             <div 
-              className={`bg-[#111111] rounded-lg p-6 border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${mode === 'race' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
+              className={`bg-[#111111] rounded-lg p-4 sm:p-6 border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${mode === 'race' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
               onClick={() => setMode('race')}
             >
-              <h3 className="text-xl font-bold text-[#f7e479] mb-3 text-center">Race Mode</h3>
-              <p className="text-secondary mb-2">
+              <h3 className="text-lg sm:text-xl font-bold text-[#f7e479] mb-2 sm:mb-3 text-center">Race Mode</h3>
+              <p className="text-xs sm:text-base text-secondary mb-1 sm:mb-2">
               Focus only on teams in the title race, European chase, or relegation battle.
               </p>
-              <p className="text-secondary mb-4">
+              <p className="text-xs sm:text-base text-secondary mb-2 sm:mb-4">
                 See only fixtures involving your selected teams and get summarized results at the end.
               </p>
             </div>
           </div>
           
           {/* Race Mode Configuration - Team Selection */}
-          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${mode === 'race' ? 'max-h-[2000px] opacity-100 mt-6 mb-8' : 'max-h-0 opacity-0'}`}>
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${mode === 'race' ? 'max-h-[2000px] opacity-100 mt-4 sm:mt-6 mb-6 sm:mb-8' : 'max-h-0 opacity-0'}`}> 
             <div className="transform transition-transform duration-500 ease-in-out" style={{ transform: mode === 'race' ? 'translateY(0)' : 'translateY(-20px)' }}>
               {/* Team Selection */}
-              <h3 className="text-lg font-semibold text-primary mb-4">Select teams to include (max 10):</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <h3 className="text-base sm:text-lg font-semibold text-primary mb-3 sm:mb-4">Select teams to include (max 10):</h3>
+              <div className="grid grid-cols-4 gap-2 sm:gap-4">
                 {standings.map(standing => (
                   <div 
                     key={standing.team.id}
                     onClick={() => handleSelectTeam(standing.team.id)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all ${
+                    className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-lg cursor-pointer transition-all ${
                       selectedTeams.includes(standing.team.id) 
                         ? 'bg-[#f7e479]/10 border border-[#f7e479]' 
                         : 'bg-[#111111] border border-[#2a2a2a] hover:border-[#444444]'
                     }`}
                   >
-                    <div className="relative w-10 h-10 mb-2">
+                    <div className="relative w-8 h-8 sm:w-10 sm:h-10 mb-1 sm:mb-2">
                       <Image
                         src={standing.team.crest || "/placeholder-team.png"}
                         alt={standing.team.name}
@@ -105,7 +105,7 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                         className="object-contain"
                       />
                     </div>
-                    <span className={`text-sm font-medium text-center ${
+                    <span className={`text-[9px] xs:text-xs sm:text-sm font-medium text-center ${
                       selectedTeams.includes(standing.team.id) ? 'text-[#f7e479]' : 'text-primary'
                     }`}>
                       {standing.team.shortName || standing.team.name}
@@ -113,17 +113,17 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                   </div>
                 ))}
               </div>
-              <div className="text-sm text-secondary mt-2 mb-6">
+              <div className="text-xs sm:text-sm text-secondary mt-1 sm:mt-2 mb-4 sm:mb-6">
                 Selected: {selectedTeams.length}/10 teams
               </div>
             </div>
           </div>
           
-          <div className="flex justify-center mt-8">
+          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-0 mt-6 sm:mt-8">
             <button
               onClick={handleContinue}
               disabled={mode === null || (mode === 'race' && selectedTeams.length === 0)}
-              className={`px-8 py-2 rounded-full font-semibold transition-all duration-300 ${
+              className={`w-full sm:w-auto px-8 py-3 sm:py-2 rounded-full font-semibold transition-all duration-300 ${
                 mode === null || (mode === 'race' && selectedTeams.length === 0)
                   ? 'bg-[#333333] text-[#666666] cursor-not-allowed'
                   : 'bg-transparent text-[#f7e479] border-2 border-[#f7e479] hover:bg-[#f7e479] hover:text-black'
@@ -136,17 +136,17 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
       ) : (
         <>
           <div className="mb-6">
-            <h3 className="text-xl font-bold text-[#f7e479] mb-6 text-center">Configure Race Mode</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-[#f7e479] mb-4 sm:mb-6 text-center">Configure Race Mode</h3>
             <div className="mx-auto max-w-2xl">
               {/* Selected Teams Display */}
-              <div className="mb-6">
-                <div className="text-lg font-semibold text-primary mb-3">Selected Teams:</div>
-                <div className="flex flex-wrap gap-2">
+              <div className="mb-4 sm:mb-6">
+                <div className="text-base sm:text-lg font-semibold text-primary mb-2 sm:mb-3">Selected Teams:</div>
+                <div className="flex flex-wrap gap-1 sm:gap-2">
                   {selectedTeams.map(teamId => {
                     const team = standings.find(s => s.team.id === teamId);
                     return team && (
-                      <div key={teamId} className="flex items-center bg-[#1a1a1a] rounded-full px-3 py-1">
-                        <div className="relative w-6 h-6 mr-2">
+                      <div key={teamId} className="flex items-center bg-[#1a1a1a] rounded-full px-2 py-1 sm:px-3 sm:py-1">
+                        <div className="relative w-5 h-5 sm:w-6 sm:h-6 mr-1 sm:mr-2">
                           <Image
                             src={team.team.crest || "/placeholder-team.png"}
                             alt={team.team.name}
@@ -154,84 +154,146 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                             className="object-contain"
                           />
                         </div>
-                        <span className="text-sm text-primary">{team.team.shortName || team.team.name}</span>
+                        <span className="text-xs sm:text-sm text-primary">{team.team.shortName || team.team.name}</span>
                       </div>
                     );
                   })}
                 </div>
-                <div className="w-full h-[1px] bg-[#333333] mt-6"></div>
+                <div className="w-full h-[1px] bg-[#333333] mt-4 sm:mt-6"></div>
               </div>
               
               {/* Unfiltered Matches and Table Display sections with connecting lines */}
-              <div className="flex justify-between mb-8 relative gap-x-8">
-                {/* Horizontal lines */}
-                {/* Top horizontal line (auto -> mini) */}
-                <div 
-                  style={{
-                    position: 'absolute',
-                    zIndex: 20,
-                    top: '12px',
-                    right: '43%',
-                    width: '12%',
-                    height: '3px',
-                    backgroundColor: unfilteredMatchesMode === 'auto' && tableDisplayMode === 'mini' ? '#f7e479' : 'transparent',
-                    transition: 'background-color 0.3s'
-                  }}
-                ></div>
-                
-                {/* Bottom horizontal line (draws -> full) */}
-                <div 
-                  style={{
-                    position: 'absolute',
-                    zIndex: 20,
-                    top: '136px',
-                    right: '43%',
-                    width: '12%',
-                    height: '3px',
-                    backgroundColor: unfilteredMatchesMode === 'draws' && tableDisplayMode === 'full' ? '#f7e479' : 'transparent',
-                    transition: 'background-color 0.3s'
-                  }}
-                ></div>
-                
-                {/* Diagonal line (auto -> full) - top left to bottom right */}
-                <div 
-                  style={{
-                    position: 'absolute',
-                    zIndex: 19,
-                    top: '120px',
-                    right: '42%',
-                    width: '20%',
-                    height: '3px',
-                    backgroundColor: unfilteredMatchesMode === 'auto' && tableDisplayMode === 'full' ? '#f7e479' : 'transparent',
-                    transition: 'background-color 0.3s',
-                    transform: 'rotate(46deg)',
-                    transformOrigin: 'right'
-                  }}
-                ></div>
-                
-                {/* Diagonal line (draws -> mini) - bottom left to top right */}
-                <div 
-                  style={{
-                    position: 'absolute',
-                    zIndex: 19,
-                    top: '23px',
-                    right: '42%',
-                    width: '20%',
-                    height: '3px',
-                    backgroundColor: unfilteredMatchesMode === 'draws' && tableDisplayMode === 'mini' ? '#f7e479' : 'transparent',
-                    transition: 'background-color 0.3s',
-                    transform: 'rotate(-46deg)',
-                    transformOrigin: 'right'
-                  }}
-                ></div>
-
-                <div className="w-5/12 z-10">
-                  <div className="h-[80px]">
-                    <div className="flex items-center mb-2 justify-between" style={{paddingRight: '10px'}}>
-                      <label htmlFor="auto-assign" className="font-medium text-primary text-center whitespace-nowrap mr-4">
+              <div className="relative flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 gap-y-8 sm:gap-x-8 min-h-[220px] sm:min-h-0">
+                {/* Connecting lines for both mobile and desktop, but adjust position for mobile */}
+                <div className="absolute inset-0 pointer-events-none z-0">
+                  {/* Top horizontal line (auto -> mini) */}
+                  <div 
+                    className="hidden sm:block"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      top: '12px',
+                      right: '43%',
+                      width: '12%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'auto' && tableDisplayMode === 'mini' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s'
+                    }}
+                  ></div>
+                  {/* Mobile horizontal line (auto -> mini) */}
+                  <div
+                    className="sm:hidden"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      top: '62px',
+                      left: '18%',
+                      width: '64%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'auto' && tableDisplayMode === 'mini' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s',
+                    }}
+                  ></div>
+                  {/* Bottom horizontal line (draws -> full) */}
+                  <div 
+                    className="hidden sm:block"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      top: '136px',
+                      right: '43%',
+                      width: '12%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'draws' && tableDisplayMode === 'full' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s'
+                    }}
+                  ></div>
+                  {/* Mobile horizontal line (draws -> full) */}
+                  <div
+                    className="sm:hidden"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      top: '162px',
+                      left: '18%',
+                      width: '64%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'draws' && tableDisplayMode === 'full' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s',
+                    }}
+                  ></div>
+                  {/* Diagonal line (auto -> full) - top left to bottom right */}
+                  <div 
+                    className="hidden sm:block"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 19,
+                      top: '120px',
+                      right: '42%',
+                      width: '20%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'auto' && tableDisplayMode === 'full' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s',
+                      transform: 'rotate(46deg)',
+                      transformOrigin: 'right'
+                    }}
+                  ></div>
+                  {/* Mobile diagonal line (auto -> full) */}
+                  <div
+                    className="sm:hidden"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 19,
+                      top: '120px',
+                      left: '18%',
+                      width: '64%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'auto' && tableDisplayMode === 'full' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s',
+                      transform: 'rotate(10deg)',
+                      transformOrigin: 'left',
+                    }}
+                  ></div>
+                  {/* Diagonal line (draws -> mini) - bottom left to top right */}
+                  <div 
+                    className="hidden sm:block"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 19,
+                      top: '23px',
+                      right: '42%',
+                      width: '20%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'draws' && tableDisplayMode === 'mini' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s',
+                      transform: 'rotate(-46deg)',
+                      transformOrigin: 'right'
+                    }}
+                  ></div>
+                  {/* Mobile diagonal line (draws -> mini) */}
+                  <div
+                    className="sm:hidden"
+                    style={{
+                      position: 'absolute',
+                      zIndex: 19,
+                      top: '62px',
+                      left: '18%',
+                      width: '64%',
+                      height: '3px',
+                      backgroundColor: unfilteredMatchesMode === 'draws' && tableDisplayMode === 'mini' ? '#f7e479' : 'transparent',
+                      transition: 'background-color 0.3s',
+                      transform: 'rotate(-10deg)',
+                      transformOrigin: 'left',
+                    }}
+                  ></div>
+                </div>
+                <div className="w-full sm:w-5/12 z-10 mb-4 sm:mb-0">
+                  <div className="h-[70px] sm:h-[80px]">
+                    <div className="flex items-center mb-1 sm:mb-2 justify-between" style={{paddingRight: '10px'}}>
+                      <label htmlFor="auto-assign" className="font-medium text-primary text-center whitespace-nowrap mr-2 sm:mr-4 text-xs sm:text-base">
                         Auto-assign based on position
                       </label>
-                      <div className="relative" style={{paddingLeft: "25px"}}>
+                      <div className="relative" style={{paddingLeft: "20px"}}>
                         <input 
                           type="radio" 
                           id="auto-assign" 
@@ -249,17 +311,17 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                         </div>
                       </div>
                     </div>
-                    <div className="ml-0 text-sm text-secondary">
+                    <div className="ml-0 text-xs sm:text-sm text-secondary">
                       Unfiltered teams: ≤ 2-place gap → draw; larger gap → higher-placed wins.
                     </div>
                   </div>
                   
-                  <div className="h-[80px] mt-[45px]">
-                    <div className="flex items-center mb-2 justify-between" style={{paddingRight: '10px'}}>
-                      <label htmlFor="all-draws" className="font-medium text-primary text-center whitespace-nowrap mr-4">
+                  <div className="h-[70px] sm:h-[80px] mt-4 sm:mt-[45px]">
+                    <div className="flex items-center mb-1 sm:mb-2 justify-between" style={{paddingRight: '10px'}}>
+                      <label htmlFor="all-draws" className="font-medium text-primary text-center whitespace-nowrap mr-2 sm:mr-4 text-xs sm:text-base">
                         Auto-draw unfiltered matches
                       </label>
-                      <div className="relative" style={{paddingLeft: "27px"}}>
+                      <div className="relative" style={{paddingLeft: "20px"}}>
                         <input 
                           type="radio" 
                           id="all-draws" 
@@ -277,16 +339,16 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                         </div>
                       </div>
                     </div>
-                    <div className="ml-0 text-sm text-secondary">
+                    <div className="ml-0 text-xs sm:text-sm text-secondary">
                       All unfiltered matches not involving your selected teams end in draws.
                     </div>
                   </div>
                 </div>
                 
-                <div className="w-5/12 z-10">
-                  <div className="h-[80px]">
-                    <div className="flex items-center mb-2">
-                      <div className="relative mr-6">
+                <div className="w-full sm:w-5/12 z-10">
+                  <div className="h-[70px] sm:h-[80px]">
+                    <div className="flex items-center mb-1 sm:mb-2">
+                      <div className="relative mr-3 sm:mr-6">
                         <input 
                           type="radio" 
                           id="mini-table" 
@@ -303,18 +365,18 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                           )}
                         </div>
                       </div>
-                      <label htmlFor="mini-table" className="font-medium text-primary text-center w-full">
+                      <label htmlFor="mini-table" className="font-medium text-primary text-center w-full text-xs sm:text-base">
                         Mini table
                       </label>
                     </div>
-                    <div className="ml-14 text-sm text-secondary">
+                    <div className="ml-8 sm:ml-14 text-xs sm:text-sm text-secondary">
                       Only show selected teams
                     </div>
                   </div>
                   
-                  <div className="h-[80px] mt-[45px]">
-                    <div className="flex items-center mb-2">
-                      <div className="relative mr-6">
+                  <div className="h-[70px] sm:h-[80px] mt-4 sm:mt-[45px]">
+                    <div className="flex items-center mb-1 sm:mb-2">
+                      <div className="relative mr-3 sm:mr-6">
                         <input 
                           type="radio" 
                           id="full-table" 
@@ -331,11 +393,11 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                           )}
                         </div>
                       </div>
-                      <label htmlFor="full-table" className="font-medium text-primary text-center w-full">
+                      <label htmlFor="full-table" className="font-medium text-primary text-center w-full text-xs sm:text-base">
                         Full table
                       </label>
                     </div>
-                    <div className="ml-14 text-sm text-secondary">
+                    <div className="ml-8 sm:ml-14 text-xs sm:text-sm text-secondary">
                       Show all teams in standings
                     </div>
                   </div>
@@ -343,17 +405,16 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
               </div>
             </div>
           </div>
-          
-          <div className="flex justify-center space-x-4 mt-8 mr-1">
+          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 mt-6 sm:mt-8 mr-0 sm:mr-1">
             <button
               onClick={() => setShowUnfilteredOptions(false)}
-              className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+              className="w-full sm:w-auto px-8 py-3 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
             >
               Back
             </button>
             <button
               onClick={handleSubmit}
-              className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+              className="w-full sm:w-auto px-8 py-3 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
             >
               Start Predictions
             </button>
