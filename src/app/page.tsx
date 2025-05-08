@@ -1151,7 +1151,7 @@ export default function Home() {
                    (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) && (
                     <button
                       onClick={handleShowPredictionSummary}
-                      className="px-4 xs:px-6 sm:px-8 py-1.5 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold text-sm sm:text-base"
+                      className="text-xs px-3 py-1 xs:text-sm xs:px-4 xs:py-1.5 sm:text-base sm:px-8 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
                     >
                       Match Summary
                     </button>
