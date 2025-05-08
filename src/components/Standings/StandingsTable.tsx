@@ -118,6 +118,53 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   const { isRaceMode, tableDisplayMode } = usePrediction();
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileM, setIsMobileM] = useState(false);
+  const [visibleStandings, setVisibleStandings] = useState<Standing[]>(standings);
+  const [animating, setAnimating] = useState(false);
+  
+  // Handle smooth transitions when table display mode or filtered teams change
+  useEffect(() => {
+    if (isRaceMode && selectedTeamIds && selectedTeamIds.length > 0) {
+      // Start animation
+      setAnimating(true);
+      
+      // Use a timeout to allow the fade-out animation to complete
+      setTimeout(() => {
+        if (tableDisplayMode === 'mini') {
+          // Filter to show only selected teams
+          const filtered = standings.filter(standing => 
+            selectedTeamIds.includes(standing.team.id)
+          );
+          setVisibleStandings(filtered);
+        } else {
+          // Show all teams for full table
+          setVisibleStandings(standings);
+        }
+        
+        // Use another timeout to fade back in after the content has been updated
+        setTimeout(() => {
+          setAnimating(false);
+        }, 50);
+      }, 250);
+    } else {
+      // No filtered view needed - show all standings
+      setVisibleStandings(standings);
+    }
+  }, [tableDisplayMode, isRaceMode, selectedTeamIds, standings]);
+  
+  // Initialize visible standings with the correct data
+  useEffect(() => {
+    if (standings.length > 0) {
+      // Set initial standings without animation
+      if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+        const filtered = standings.filter(standing => 
+          selectedTeamIds.includes(standing.team.id)
+        );
+        setVisibleStandings(filtered);
+      } else {
+        setVisibleStandings(standings);
+      }
+    }
+  }, [standings, isRaceMode, tableDisplayMode, selectedTeamIds]);
   
   // Detect screen size
   useEffect(() => {
@@ -626,31 +673,11 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     );
   }
   
-  // Filter standings if in race mode with mini table mode AND selectedTeamIds are provided
+  // Filter and sort standings
   console.log("StandingsTable - Race mode state:", isRaceMode, "TableDisplayMode:", tableDisplayMode, "SelectedTeamIds:", selectedTeamIds?.length || 0);
-
-  let filteredStandings = [...standings];
-  // Only filter if ALL conditions are met:
-  // 1. Race mode is explicitly enabled
-  // 2. Table display mode is set to mini
-  // 3. We have selected team IDs
-  // 4. There are actually teams selected
-  if (isRaceMode === true && 
-      tableDisplayMode === 'mini' && 
-      selectedTeamIds && 
-      selectedTeamIds.length > 0) {
-    console.log("Filtering standings to show only selected teams");
-    filteredStandings = filteredStandings.filter(standing => 
-      selectedTeamIds.includes(standing.team.id)
-    );
-  } else {
-    // Always use full standings when not in race mode or conditions aren't met
-    console.log("Showing full standings table");
-    filteredStandings = [...standings];
-  }
   
   // Sort the standings by position to ensure correct display order
-  const sortedStandings = filteredStandings.sort((a, b) => a.position - b.position);
+  const sortedStandings = visibleStandings.sort((a, b) => a.position - b.position);
 
   // Set column widths based on screen size
   const getColumnClass = (index: number) => {
@@ -671,79 +698,86 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     return ""; // Default (auto)
   };
 
+  // Dynamic styles for highlighting and transitions
+  const getRowStyle = (standing: Standing, index: number) => {
+    const isSelectedTeam = selectedTeamIds?.includes(standing.team.id);
+    const highlightRow = isRaceMode && tableDisplayMode === 'full' && isSelectedTeam;
+    
+    return `${highlightRow ? 'bg-[#f7e479]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
+            hover:bg-black/10 transition-all duration-300 ease-in-out`;
+  };
+
   return (
     <div className={`rounded-lg w-full ${isMobile ? 'overflow-x-auto' : 'overflow-x-visible'} ${isMobile ? 'px-0' : 'px-2'}`}>
-      <table className={`w-full bg-transparent ${!isMobile ? 'table-fixed' : ''}`}>
-        <thead>
-          <tr>
-            <th className="w-16 text-center px-0 py-2 sm:py-3 text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">
-              <span className="block w-full text-center">POS</span>
-            </th>
-            <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-left w-32 sm:w-40 min-w-[120px] sm:min-w-[160px] md:w-56 md:min-w-[220px] md:pr-8 text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(1)}`}>Team</th>
-            <th className={`px-0.5 sm:px-6 pl-2 sm:pl-8 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(2)}`}>P</th>
-            <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(3)}`}>W</th>
-            <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(4)}`}>D</th>
-            <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(5)}`}>L</th>
-            <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(6)}`}>GD</th>
-            <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(7)}`}>Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedStandings.map((standing, index) => {
-            const positionChange = getPositionChange(standing, initialStandings);
-            const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
-            const relegationStatus = getRelegationStatus(standing.position, leagueCode);
-            
-            // Highlight selected teams in race mode with full table display
-            const isSelectedTeam = selectedTeamIds?.includes(standing.team.id);
-            const highlightRow = isRaceMode && tableDisplayMode === 'full' && isSelectedTeam;
-            
-            return (
-              <tr 
-                key={standing.team.id} 
-                className={`${highlightRow ? 'bg-[#f7e479]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} hover:bg-black/5 transition-colors duration-75`}
-              >
-                <td className="w-16 px-0 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary">
-                  <div className={`flex flex-row items-center justify-center h-full ${isMobileM ? 'gap-0' : 'gap-0'}`}>
-                    <span className="block w-6 text-center">{standing.position}</span>
-                    <span className="flex flex-row items-center" style={{ minWidth: badgeSize, minHeight: badgeSize }}>
-                      {relegationStatus.status && <RelegationIndicator status={relegationStatus.status} color={relegationStatus.color} size={badgeSize} />}
-                      {euroCompetition && <CompetitionLogo logo={euroCompetition} size={badgeSize} />}
-                      {!relegationStatus.status && !euroCompetition && <span style={{ width: badgeSize, height: badgeSize, display: 'inline-block' }} />}
-                    </span>
-                  </div>
-                </td>
-                <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap w-32 sm:w-40 min-w-[120px] sm:min-w-[160px] md:w-56 md:min-w-[220px] md:pr-8 ${getColumnClass(1)}`}>
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-4 w-4 sm:h-6 sm:w-6 relative">
-                      <Image
-                        src={standing.team.crest || "/placeholder-team.png"}
-                        alt={standing.team.name}
-                        fill
-                        className="object-contain"
-                      />
+      <div className={`transition-opacity duration-300 ease-in-out ${animating ? 'opacity-0' : 'opacity-100'}`}>
+        <table className={`w-full bg-transparent ${!isMobile ? 'table-fixed' : ''}`}>
+          <thead>
+            <tr>
+              <th className="w-16 text-center px-0 py-2 sm:py-3 text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">
+                <span className="block w-full text-center">POS</span>
+              </th>
+              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-left w-32 sm:w-40 min-w-[120px] sm:min-w-[160px] md:w-56 md:min-w-[220px] md:pr-8 text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(1)}`}>Team</th>
+              <th className={`px-0.5 sm:px-6 pl-2 sm:pl-8 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(2)}`}>P</th>
+              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(3)}`}>W</th>
+              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(4)}`}>D</th>
+              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(5)}`}>L</th>
+              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(6)}`}>GD</th>
+              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(7)}`}>Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedStandings.map((standing, index) => {
+              const positionChange = getPositionChange(standing, initialStandings);
+              const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
+              const relegationStatus = getRelegationStatus(standing.position, leagueCode);
+              
+              return (
+                <tr 
+                  key={standing.team.id} 
+                  className={getRowStyle(standing, index)}
+                >
+                  <td className="w-16 px-0 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary">
+                    <div className={`flex flex-row items-center justify-center h-full ${isMobileM ? 'gap-0' : 'gap-0'}`}>
+                      <span className="block w-6 text-center">{standing.position}</span>
+                      <span className="flex flex-row items-center" style={{ minWidth: badgeSize, minHeight: badgeSize }}>
+                        {relegationStatus.status && <RelegationIndicator status={relegationStatus.status} color={relegationStatus.color} size={badgeSize} />}
+                        {euroCompetition && <CompetitionLogo logo={euroCompetition} size={badgeSize} />}
+                        {!relegationStatus.status && !euroCompetition && <span style={{ width: badgeSize, height: badgeSize, display: 'inline-block' }} />}
+                      </span>
                     </div>
-                    <div className="ml-2 sm:ml-4 flex items-center">
-                      <div className="text-[10px] sm:text-sm font-medium text-primary truncate max-w-[80px] sm:max-w-full">
-                        {isMobile ? standing.team.shortName || standing.team.tla || standing.team.name.split(' ')[0] : standing.team.name}
+                  </td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap w-32 sm:w-40 min-w-[120px] sm:min-w-[160px] md:w-56 md:min-w-[220px] md:pr-8 ${getColumnClass(1)}`}>
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-4 w-4 sm:h-6 sm:w-6 relative">
+                        <Image
+                          src={standing.team.crest || "/placeholder-team.png"}
+                          alt={standing.team.name}
+                          fill
+                          className="object-contain"
+                        />
                       </div>
-                      <PositionChangeIndicator change={positionChange} size={isMobile || (typeof window !== 'undefined' && window.innerWidth < 1024) ? 'small' : 'default'} />
+                      <div className="ml-2 sm:ml-4 flex items-center">
+                        <div className="text-[10px] sm:text-sm font-medium text-primary truncate max-w-[80px] sm:max-w-full">
+                          {isMobile ? standing.team.shortName || standing.team.tla || standing.team.name.split(' ')[0] : standing.team.name}
+                        </div>
+                        <PositionChangeIndicator change={positionChange} size={isMobile || (typeof window !== 'undefined' && window.innerWidth < 1024) ? 'small' : 'default'} />
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className={`px-0.5 sm:px-6 sm:pl-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(2)}`}>{standing.playedGames}</td>
-                <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(3)}`}>{standing.won}</td>
-                <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(4)}`}>{standing.draw}</td>
-                <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(5)}`}>{standing.lost}</td>
-                <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(6)}`}>
-                  {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
-                </td>
-                <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm font-bold text-primary text-center ${getColumnClass(7)}`}>{standing.points}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </td>
+                  <td className={`px-0.5 sm:px-6 sm:pl-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(2)}`}>{standing.playedGames}</td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(3)}`}>{standing.won}</td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(4)}`}>{standing.draw}</td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(5)}`}>{standing.lost}</td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(6)}`}>
+                    {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
+                  </td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm font-bold text-primary text-center ${getColumnClass(7)}`}>{standing.points}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 } 

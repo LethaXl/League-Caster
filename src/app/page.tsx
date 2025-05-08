@@ -76,7 +76,8 @@ export default function Home() {
     selectedTeamIds,
     isRaceMode,
     setUnfilteredMatchesMode,
-    setTableDisplayMode
+    setTableDisplayMode,
+    tableDisplayMode
   } = usePrediction();
 
   // Ensure race mode settings are reset on initial load
@@ -1152,7 +1153,7 @@ export default function Home() {
                       onClick={handleShowPredictionSummary}
                       className="px-4 xs:px-6 sm:px-8 py-1.5 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold text-sm sm:text-base"
                     >
-                      Show Summary
+                      Match Summary
                     </button>
                   )}
                   {isViewingStandings && !loading && viewingFromMatchday && (
@@ -1202,6 +1203,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
+            
             <StandingsTable 
               standings={isViewingStandings && !viewingFromMatchday ? predictedStandings : viewingFromMatchday ? predictedStandings : standings} 
               initialStandings={isViewingStandings || viewingFromMatchday ? standings : undefined}
@@ -1209,6 +1211,33 @@ export default function Home() {
               leagueCode={selectedLeague || undefined}
               selectedTeamIds={isRaceMode ? selectedTeamIds : undefined}
             />
+            
+            {/* Table display toggle - at the bottom of the table */}
+            {isRaceMode && isViewingStandings && 
+             (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) && (
+              <div className="flex justify-center items-center mt-4">
+                <div className="inline-flex rounded-md">
+                  <button 
+                    type="button" 
+                    className={`px-4 py-2 text-sm font-semibold border-2 rounded-l-lg transition-all duration-300 ease-in-out ${tableDisplayMode === 'mini' 
+                      ? 'bg-[#12121a] text-[#f7e479] border-[#f7e479]' 
+                      : 'bg-transparent text-[#555555] border-[#333333] hover:border-[#555555] hover:text-[#777777]'}`}
+                    onClick={() => setTableDisplayMode('mini')}
+                  >
+                    Mini Table
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`px-4 py-2 text-sm font-semibold border-2 rounded-r-lg transition-all duration-300 ease-in-out ${tableDisplayMode === 'full' 
+                      ? 'bg-[#12121a] text-[#f7e479] border-[#f7e479]' 
+                      : 'bg-transparent text-[#555555] border-[#333333] hover:border-[#555555] hover:text-[#777777]'}`}
+                    onClick={() => setTableDisplayMode('full')}
+                  >
+                    Full Table
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : showModeSelection ? (
           <ModeSelection 

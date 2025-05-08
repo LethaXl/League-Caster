@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Match, Prediction } from '@/types/predictions';
 import { Standing } from '@/services/football-api';
+import StandingsTable from '../Standings/StandingsTable';
+import { usePrediction } from '@/contexts/PredictionContext';
 
 interface PredictionSummaryProps {
   predictions: Map<number, Prediction>;
@@ -18,6 +20,9 @@ export default function PredictionSummary({
   standings,
   onClose 
 }: PredictionSummaryProps) {
+  const { isRaceMode, tableDisplayMode, setTableDisplayMode } = usePrediction();
+  const [viewMode, setViewMode] = useState<'table' | 'summary'>('summary');
+  
   // Add debugging to see what data we're getting
   const [matchdayData, setMatchdayData] = useState<{
     matchCount: number;
@@ -165,142 +170,178 @@ export default function PredictionSummary({
   return (
     <div className="fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-4">
       <div className="bg-[#111111] rounded-lg p-6 w-full max-w-6xl border border-[#2a2a2a] shadow-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-center items-center mb-8 border-b border-[#2a2a2a] pb-4">
-          <h2 className="text-2xl font-bold text-[#f7e479] text-center">Forecast Summary</h2>
-        </div>
-        
-        {/* Debug info */}
-        {matchdayData.matchCount === 0 && (
-          <div className="text-center text-red-400 mb-4">
-            No matches found. Please make predictions first.
-          </div>
-        )}
-        
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="px-2 py-3 text-center text-sm font-semibold text-[#f7e479] border-b border-[#2a2a2a] min-w-[90px]">
-                  Matchday
-                </th>
-                {sortedTeamIds.map(teamId => {
-                  const team = getTeamDetails(teamId);
-                  if (!team) return null;
-                  
-                  return (
-                    <th key={teamId} className="px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] min-w-[150px]">
-                      <div className="flex flex-col items-center">
-                        <div className="relative h-8 w-8 mb-2">
-                          <Image
-                            src={team.crest || "/placeholder-team.png"}
-                            alt={team.name}
-                            fill
-                            className="object-contain"
-                          />
-                        </div>
-                        <span className="text-xs">{team.shortName || team.name}</span>
-                      </div>
+        {viewMode === 'table' ? (
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex-grow text-center">
+                <h2 className="text-2xl font-bold text-[#f7e479]">Final Table</h2>
+              </div>
+              <button
+                onClick={() => setViewMode('summary')}
+                className="px-4 py-2 bg-transparent text-[#f7e479] border border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 text-sm font-semibold"
+              >
+                Show Matches
+              </button>
+            </div>
+            
+            {/* Standings table */}
+            <StandingsTable 
+              standings={standings} 
+              loading={false} 
+              selectedTeamIds={selectedTeamIds} 
+            />
+            
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={onClose}
+                className="px-8 py-2 bg-transparent text-[#f7e479] border border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex-grow text-center">
+                <h2 className="text-2xl font-bold text-[#f7e479]">Forecast Summary</h2>
+              </div>
+            </div>
+            
+            {/* Debug info */}
+            {matchdayData.matchCount === 0 && (
+              <div className="text-center text-red-400 mb-4">
+                No matches found. Please make predictions first.
+              </div>
+            )}
+            
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className="px-2 py-3 text-center text-sm font-semibold text-[#f7e479] border-b border-[#2a2a2a] min-w-[90px]">
+                      Matchday
                     </th>
-                  );
-                })}
-                <th className="px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] min-w-[90px]">
-                  &nbsp;
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {allMatchdays.map(matchday => (
-                <tr key={matchday} className="border-b border-[#2a2a2a]/50 last:border-b-0">
-                  <td className="px-2 py-3 text-center font-semibold text-white">
-                    {matchday}
-                  </td>
-                  
-                  {sortedTeamIds.map(teamId => {
-                    const teamMatches = matchesByMatchdayAndTeam.get(matchday)?.get(teamId) || [];
-                    
-                    return (
-                      <td key={`${matchday}-${teamId}`} className="px-2 py-3 align-top">
-                        {teamMatches.length > 0 ? (
-                          <div className="space-y-2">
-                            {teamMatches.map(match => {
-                              const prediction = predictions.get(match.id);
-                              const isHome = match.homeTeam.id === teamId;
-                              const opponent = isHome ? match.awayTeam : match.homeTeam;
-                              
-                              return (
-                                <div key={match.id} className="flex items-center justify-between text-sm bg-[#1a1a1a] p-2 rounded">
-                                  <div className="flex items-center flex-1">
-                                    <span className="text-gray-400 text-xs font-medium mr-1 min-w-[22px]">
-                                      {isHome ? '(H)' : '(A)'}
-                                    </span>
-                                    <div className="relative h-5 w-5 mr-1">
-                                      <Image
-                                        src={opponent.crest || "/placeholder-team.png"}
-                                        alt={opponent.name}
-                                        fill
-                                        className="object-contain"
-                                      />
-                                    </div>
-                                    <span className="text-xs text-primary truncate flex-1" title={opponent.name}>
-                                      {opponent.shortName || opponent.name}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex items-center ml-1">
-                                    {prediction?.type === 'custom' && (
-                                      <span className="mr-1 text-[10px] text-gray-400">
-                                        {getScoreText(prediction)}
-                                      </span>
-                                    )}
-                                    <span className={`font-medium text-xs ${getResultColorClass(match, prediction, teamId)}`}>
-                                      {getResultText(match, prediction, teamId)}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                    {sortedTeamIds.map(teamId => {
+                      const team = getTeamDetails(teamId);
+                      if (!team) return null;
+                      
+                      return (
+                        <th key={teamId} className="px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] min-w-[150px]">
+                          <div className="flex flex-col items-center">
+                            <div className="relative h-8 w-8 mb-2">
+                              <Image
+                                src={team.crest || "/placeholder-team.png"}
+                                alt={team.name}
+                                fill
+                                className="object-contain"
+                              />
+                            </div>
+                            <span className="text-xs">{team.shortName || team.name}</span>
                           </div>
-                        ) : (
-                          <div className="text-center text-xs text-gray-400">-</div>
-                        )}
+                        </th>
+                      );
+                    })}
+                    <th className="px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] min-w-[90px]">
+                      &nbsp;
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allMatchdays.map(matchday => (
+                    <tr key={matchday} className="border-b border-[#2a2a2a]/50 last:border-b-0">
+                      <td className="px-2 py-3 text-center font-semibold text-white">
+                        {matchday}
                       </td>
-                    );
-                  })}
+                      
+                      {sortedTeamIds.map(teamId => {
+                        const teamMatches = matchesByMatchdayAndTeam.get(matchday)?.get(teamId) || [];
+                        
+                        return (
+                          <td key={`${matchday}-${teamId}`} className="px-2 py-3 align-top">
+                            {teamMatches.length > 0 ? (
+                              <div className="space-y-2">
+                                {teamMatches.map(match => {
+                                  const prediction = predictions.get(match.id);
+                                  const isHome = match.homeTeam.id === teamId;
+                                  const opponent = isHome ? match.awayTeam : match.homeTeam;
+                                  
+                                  return (
+                                    <div key={match.id} className="flex items-center justify-between text-sm bg-[#1a1a1a] p-2 rounded">
+                                      <div className="flex items-center flex-1">
+                                        <span className="text-gray-400 text-xs font-medium mr-1 min-w-[22px]">
+                                          {isHome ? '(H)' : '(A)'}
+                                        </span>
+                                        <div className="relative h-5 w-5 mr-1">
+                                          <Image
+                                            src={opponent.crest || "/placeholder-team.png"}
+                                            alt={opponent.name}
+                                            fill
+                                            className="object-contain"
+                                          />
+                                        </div>
+                                        <span className="text-xs text-primary truncate flex-1" title={opponent.name}>
+                                          {opponent.shortName || opponent.name}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="flex items-center ml-1">
+                                        {prediction?.type === 'custom' && (
+                                          <span className="mr-1 text-[10px] text-gray-400">
+                                            {getScoreText(prediction)}
+                                          </span>
+                                        )}
+                                        <span className={`font-medium text-xs ${getResultColorClass(match, prediction, teamId)}`}>
+                                          {getResultText(match, prediction, teamId)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="text-center text-xs text-gray-400">-</div>
+                            )}
+                          </td>
+                        );
+                      })}
+                      
+                      <td className="px-2 py-3 text-center">
+                        &nbsp;
+                      </td>
+                    </tr>
+                  ))}
                   
-                  <td className="px-2 py-3 text-center">
-                    &nbsp;
-                  </td>
-                </tr>
-              ))}
-              
-              {/* Total points row */}
-              <tr className="border-t-2 border-[#2a2a2a]">
-                <td className="px-2 py-3 text-center font-semibold text-[#f7e479]">
-                  Total Points:
-                </td>
-                {sortedTeamIds.map(teamId => {
-                  const points = getTeamPoints(teamId);
-                  
-                  return (
-                    <td key={`points-${teamId}`} className="px-2 py-3 text-center">
-                      <span className="text-lg font-bold text-white">{points}</span>
+                  {/* Total points row */}
+                  <tr className="border-t-2 border-[#2a2a2a]">
+                    <td className="px-2 py-3 text-center font-semibold text-[#f7e479]">
+                      Total Points:
                     </td>
-                  );
-                })}
-                <td className="px-2 py-3">&nbsp;</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        
-        <div className="mt-6 flex justify-center">
-          <button
-            onClick={onClose}
-            className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
-          >
-            Close Summary
-          </button>
-        </div>
+                    {sortedTeamIds.map(teamId => {
+                      const points = getTeamPoints(teamId);
+                      
+                      return (
+                        <td key={`points-${teamId}`} className="px-2 py-3 text-center">
+                          <span className="text-lg font-bold text-white">{points}</span>
+                        </td>
+                      );
+                    })}
+                    <td className="px-2 py-3">&nbsp;</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={onClose}
+                className="px-8 py-2 bg-transparent text-[#f7e479] border border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
