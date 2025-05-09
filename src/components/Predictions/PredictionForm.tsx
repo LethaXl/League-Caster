@@ -60,8 +60,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   }, []);
   
   // Determine if we're in the constrained view
-  const isConstrainedView = screenWidth >= 1000 && screenWidth <= 1280;
-  
+  const isConstrainedView = screenWidth >= 1026 && screenWidth <= 1280;
+
+  // Determine if we're in the very specific 1001-1025px range that needs fixing
+  const isSpecificConstrainedView = screenWidth >= 1001 && screenWidth <= 1025;
+
   // Determine if we're in the medium constrained view (between 700px and 1000px)
   const isMediumConstrainedView = screenWidth >= 750 && screenWidth <= 1000;
 
@@ -1546,14 +1549,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                     {matches.slice(0, matches.length - 1).map((match: Match) => (
                       <div key={match.id} className="flex justify-center mb-1">
                         <div className="w-[130px]">
-                          <MatchPrediction
-                            key={match.id}
-                            match={match}
-                            onPredictionChange={handlePredictionChange}
-                          />
+                    <MatchPrediction
+                      key={match.id}
+                      match={match}
+                      onPredictionChange={handlePredictionChange}
+                    />
                         </div>
-                      </div>
-                    ))}
+                  </div>
+                ))}
                     {/* Then render the last match centered across two columns */}
                     <div className="flex justify-center col-span-2 mt-0.5">
                       <div className="w-[130px]">
@@ -1562,7 +1565,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                           match={matches[matches.length - 1]}
                           onPredictionChange={handlePredictionChange}
                         />
-                      </div>
+              </div>
                     </div>
                   </>
                 ) : (
@@ -1590,14 +1593,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                     {matches.slice(0, matches.length - 1).map((match: Match) => (
                       <div key={match.id} className="flex justify-center mb-3">
                         <div className="w-[145px]">
-                          <MatchPrediction
-                            key={match.id}
-                            match={match}
-                            onPredictionChange={handlePredictionChange}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      <MatchPrediction
+                        key={match.id}
+                        match={match}
+                        onPredictionChange={handlePredictionChange}
+                      />
+                    </div>
+                  </div>
+                ))}
                     {/* Then render the last match centered across two columns */}
                     <div className="flex justify-center col-span-2 mt-1">
                       <div className="w-[145px]">
@@ -1721,15 +1724,15 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                     {/* First render pairs (all except the last match) */}
                     {matches.slice(0, matches.length - 1).map((match: Match) => (
                       <div key={match.id} className="flex justify-center mb-3">
-                        <div className="w-[210px]">
-                          <MatchPrediction
-                            key={match.id}
-                            match={match}
-                            onPredictionChange={handlePredictionChange}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                    <div className="w-[210px]">
+                      <MatchPrediction
+                        key={match.id}
+                        match={match}
+                        onPredictionChange={handlePredictionChange}
+                      />
+                    </div>
+                  </div>
+                ))}
                     {/* Then render the last match centered across two columns */}
                     <div className="flex justify-center col-span-2 mt-1">
                       <div className="w-[210px]">
@@ -1814,7 +1817,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                     ))}
                     {/* Add empty cell for alignment if needed */}
                     {matches.length % 3 === 2 && (
-                      <div className="flex justify-center opacity-0"></div>
+                  <div className="flex justify-center opacity-0"></div>
                     )}
                   </>
                 )}
@@ -1832,6 +1835,239 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                   </div>
                 ))}
               </div>
+            ) : isSpecificConstrainedView ? (
+              // Special handling for 1001px-1025px range (3 cards per row with centering)
+              <>
+                {/* First row */}
+                <div className="flex flex-wrap justify-center gap-4 mb-4 max-w-full mx-auto">
+                  {(() => {
+                    if (matches.length === 3) {
+                      // For exactly 3 matches, display in one row
+                      return matches.map((match: Match) => (
+                        <div key={match.id} style={{ width: '210px' }}>
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      ));
+                    } else if (matches.length === 2) {
+                      // For exactly 2 matches, center them
+                      return (
+                        <>
+                          <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                          {matches.slice(0, 2).map((match: Match) => (
+                            <div key={match.id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={match.id}
+                                match={match}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                          ))}
+                          <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                        </>
+                      );
+                    } else if (matches.length === 1) {
+                      // Center a single match
+                      return (
+                        <>
+                          <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                          <div key={matches[0].id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={matches[0].id}
+                              match={matches[0]}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                          <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                        </>
+                      );
+                    } else {
+                      // For more matches, display first 3
+                      return matches.slice(0, 3).map((match: Match) => (
+                        <div key={match.id} style={{ width: '210px' }}>
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      ));
+                    }
+                  })()}
+                </div>
+
+                {/* Second row (if more than 3 matches) */}
+                {matches.length > 3 && (
+                  <div className="flex flex-wrap justify-center gap-4 max-w-full mx-auto">
+                    {(() => {
+                      if (matches.length === 4) {
+                        // For 4 matches, center the single match in second row
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                            <div key={matches[3].id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={matches[3].id}
+                                match={matches[3]}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else if (matches.length === 5) {
+                        // For 5 matches, center the 2 matches in second row
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                            {matches.slice(3, 5).map((match: Match) => (
+                              <div key={match.id} style={{ width: '210px' }}>
+                                <MatchPrediction
+                                  key={match.id}
+                                  match={match}
+                                  onPredictionChange={handlePredictionChange}
+                                />
+                              </div>
+                            ))}
+                            <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else if (matches.length === 6) {
+                        // For 6 matches, display 3 in second row
+                        return matches.slice(3, 6).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      } else {
+                        // For more than 6 matches, display next 3
+                        return matches.slice(3, 6).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      }
+                    })()}
+                  </div>
+                )}
+
+                {/* Third row (if more than 6 matches) */}
+                {matches.length > 6 && (
+                  <div className="flex flex-wrap justify-center gap-4 max-w-full mx-auto mt-4">
+                    {(() => {
+                      if (matches.length === 7) {
+                        // For 7 matches, center the single match in third row
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                            <div key={matches[6].id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={matches[6].id}
+                                match={matches[6]}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else if (matches.length === 8) {
+                        // For 8 matches, center the 2 matches in third row
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                            {matches.slice(6, 8).map((match: Match) => (
+                              <div key={match.id} style={{ width: '210px' }}>
+                                <MatchPrediction
+                                  key={match.id}
+                                  match={match}
+                                  onPredictionChange={handlePredictionChange}
+                                />
+                              </div>
+                            ))}
+                            <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else {
+                        // For 9 or more matches, display next 3
+                        return matches.slice(6, 9).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      }
+                    })()}
+                  </div>
+                )}
+
+                {/* Fourth row (if more than 9 matches) */}
+                {matches.length > 9 && (
+                  <div className="flex flex-wrap justify-center gap-4 max-w-full mx-auto mt-4">
+                    {(() => {
+                      const remainingCount = matches.length - 9;
+                      
+                      if (remainingCount === 1) {
+                        // Center a single match
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                            <div key={matches[9].id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={matches[9].id}
+                                match={matches[9]}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else if (remainingCount === 2) {
+                        // Center two matches
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                            {matches.slice(9, 11).map((match: Match) => (
+                              <div key={match.id} style={{ width: '210px' }}>
+                                <MatchPrediction
+                                  key={match.id}
+                                  match={match}
+                                  onPredictionChange={handlePredictionChange}
+                                />
+                              </div>
+                            ))}
+                            <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else {
+                        // Display up to three more matches
+                        return matches.slice(9, 12).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      }
+                    })()}
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 {/* First row */}

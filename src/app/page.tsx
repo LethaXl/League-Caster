@@ -1263,7 +1263,7 @@ export default function Home() {
             onModeSelect={handleModeSelect}
           />
         ) : (
-          <div className="bg-card rounded-lg p-6">
+          <div className="bg-card rounded-lg p-6 mx-1 sm:mx-2 md:mx-3 mb-4 sm:mb-6">
             <PredictionForm
               leagueCode={selectedLeague || ''}
               initialStandings={standings}
