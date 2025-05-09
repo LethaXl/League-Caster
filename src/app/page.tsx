@@ -63,6 +63,8 @@ export default function Home() {
   const [initialMatches, setInitialMatches] = useState<Match[]>([]);
   // Add initialization flag to track if a reset has been done on this session
   const initializedRef = useRef(false);
+  // Add state for responsive design
+  const [isMobileLConstrainedView, setIsMobileLConstrainedView] = useState(false);
 
   const {
     isViewingStandings,
@@ -79,6 +81,21 @@ export default function Home() {
     setTableDisplayMode,
     tableDisplayMode
   } = usePrediction();
+
+  // Track screen width for responsive layouts
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleResize = () => {
+      setIsMobileLConstrainedView(window.innerWidth >= 375 && window.innerWidth < 450);
+    };
+    
+    // Set initial value
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Ensure race mode settings are reset on initial load
   useEffect(() => {
@@ -1089,7 +1106,7 @@ export default function Home() {
                         className="w-12 h-12 xs:w-15 xs:h-15 sm:w-19 sm:h-19 md:w-23 md:h-23 object-contain"
                         style={{ maxWidth: '3.5rem', maxHeight: '3.5rem' }} 
                       />
-                      <span className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-primary">{league.name}</span>
+                      <span className={`${isMobileLConstrainedView ? 'text-2xl' : 'text-lg xs:text-xl'} sm:text-2xl md:text-3xl font-bold text-primary`}>{league.name}</span>
                     </div>
                   );
                 })()

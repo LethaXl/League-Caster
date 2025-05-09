@@ -41,6 +41,39 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Add state for screen width tracking
+  const [screenWidth, setScreenWidth] = useState(0);
+  
+  // Track screen width for responsive layouts
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleResize = () => {
+      setScreenWidth(window.innerWidth);
+    };
+    
+    // Set initial value
+    setScreenWidth(window.innerWidth);
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Determine if we're in the constrained view
+  const isConstrainedView = screenWidth >= 1000 && screenWidth <= 1280;
+  
+  // Determine if we're in the medium constrained view (between 700px and 1000px)
+  const isMediumConstrainedView = screenWidth >= 750 && screenWidth <= 1000;
+
+  const isTabletSmallConstrainedView = screenWidth >= 640 && screenWidth < 750;
+
+  const isMobileXLConstrainedView = screenWidth >= 450 && screenWidth < 640;
+
+  const isMobileLConstrainedView = screenWidth >= 375 && screenWidth < 450;
+
+  const isMobileMConstrainedView = screenWidth >= 340 && screenWidth < 375;
+
+  const isMobileSConstrainedView = screenWidth >= 320 && screenWidth < 340;
   
   // Get the maximum matchday for this league
   const MAX_MATCHDAY = getMaxMatchday(leagueCode);
@@ -1503,17 +1536,294 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           <NoRaceMatches onNextMatchday={handleNextMatchday} />
         ) : (
           <>
-            {matches.length <= 5 ? (
+            {isMobileSConstrainedView ? (
+              // Special layout for smallest mobile screens (320px-340px) - 2 cards per row
+              <div className="grid grid-cols-2 gap-1 mx-auto max-w-[310px]">
+                {matches.length % 2 === 1 ? (
+                  // For odd number of matches, use special handling to center the last one
+                  <>
+                    {/* First render pairs (all except the last match) */}
+                    {matches.slice(0, matches.length - 1).map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-1">
+                        <div className="w-[130px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Then render the last match centered across two columns */}
+                    <div className="flex justify-center col-span-2 mt-0.5">
+                      <div className="w-[130px]">
+                        <MatchPrediction
+                          key={matches[matches.length - 1].id}
+                          match={matches[matches.length - 1]}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // For even number of matches, regular grid layout
+                  matches.map((match: Match) => (
+                    <div key={match.id} className="flex justify-center mb-1">
+                      <div className="w-[130px]">
+                        <MatchPrediction
+                          key={match.id}
+                          match={match}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : isMobileMConstrainedView ? (
+              // Special layout for smallest mobile screens (340px-375px) - 2 cards per row
+              <div className="grid grid-cols-2 gap-2 mx-auto max-w-[340px]">
+                {matches.length % 2 === 1 ? (
+                  // For odd number of matches, use special handling to center the last one
+                  <>
+                    {/* First render pairs (all except the last match) */}
+                    {matches.slice(0, matches.length - 1).map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-3">
+                        <div className="w-[145px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Then render the last match centered across two columns */}
+                    <div className="flex justify-center col-span-2 mt-1">
+                      <div className="w-[145px]">
+                        <MatchPrediction
+                          key={matches[matches.length - 1].id}
+                          match={matches[matches.length - 1]}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // For even number of matches, regular grid layout
+                  matches.map((match: Match) => (
+                    <div key={match.id} className="flex justify-center mb-3">
+                      <div className="w-[145px]">
+                        <MatchPrediction
+                          key={match.id}
+                          match={match}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : isMobileLConstrainedView ? (
+              // Special layout for small mobile screens (375px-450px) - 2 cards per row
+              <div className="grid grid-cols-2 gap-2 mx-auto max-w-[370px]">
+                {matches.length % 2 === 1 ? (
+                  // For odd number of matches, use special handling to center the last one
+                  <>
+                    {/* First render pairs (all except the last match) */}
+                    {matches.slice(0, matches.length - 1).map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-3">
+                        <div className="w-[160px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Then render the last match centered across two columns */}
+                    <div className="flex justify-center col-span-2 mt-1">
+                      <div className="w-[160px]">
+                        <MatchPrediction
+                          key={matches[matches.length - 1].id}
+                          match={matches[matches.length - 1]}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // For even number of matches, regular grid layout
+                  matches.map((match: Match) => (
+                    <div key={match.id} className="flex justify-center mb-3">
+                      <div className="w-[160px]">
+                        <MatchPrediction
+                          key={match.id}
+                          match={match}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : isMobileXLConstrainedView ? (
+              // Special layout for mobile screens (450px-640px) - 2 cards per row
+              <div className="grid grid-cols-2 gap-3 mx-auto max-w-[450px]">
+                {matches.length % 2 === 1 ? (
+                  // For odd number of matches, use special handling to center the last one
+                  <>
+                    {/* First render pairs (all except the last match) */}
+                    {matches.slice(0, matches.length - 1).map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-3">
+                        <div className="w-[185px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Then render the last match centered across two columns */}
+                    <div className="flex justify-center col-span-2 mt-1">
+                      <div className="w-[185px]">
+                        <MatchPrediction
+                          key={matches[matches.length - 1].id}
+                          match={matches[matches.length - 1]}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // For even number of matches, regular grid layout
+                  matches.map((match: Match) => (
+                    <div key={match.id} className="flex justify-center mb-3">
+                      <div className="w-[185px]">
+                        <MatchPrediction
+                          key={match.id}
+                          match={match}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : isTabletSmallConstrainedView ? (
+              // Special layout for small tablets (640px-750px) - 2 cards per row
+              <div className="grid grid-cols-2 gap-4 max-w-[460px] mx-auto">
+                {matches.length % 2 === 1 ? (
+                  // For odd number of matches, use special handling to center the last one
+                  <>
+                    {/* First render pairs (all except the last match) */}
+                    {matches.slice(0, matches.length - 1).map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-3">
+                        <div className="w-[210px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Then render the last match centered across two columns */}
+                    <div className="flex justify-center col-span-2 mt-1">
+                      <div className="w-[210px]">
+                        <MatchPrediction
+                          key={matches[matches.length - 1].id}
+                          match={matches[matches.length - 1]}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // For even number of matches, regular grid layout
+                  matches.map((match: Match) => (
+                    <div key={match.id} className="flex justify-center mb-3">
+                      <div className="w-[210px]">
+                        <MatchPrediction
+                          key={match.id}
+                          match={match}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : isMediumConstrainedView ? (
+              // Special layout for medium screens (750px-1000px) - 3 cards per row
+              <div className="grid grid-cols-3 gap-4 max-w-[700px] mx-auto">
+                {matches.length % 3 === 0 ? (
+                  // For matches divisible by 3, use regular grid
+                  matches.map((match: Match) => (
+                    <div key={match.id} className="flex justify-center mb-3">
+                      <div className="w-[210px]">
+                        <MatchPrediction
+                          key={match.id}
+                          match={match}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  ))
+                ) : matches.length % 3 === 1 ? (
+                  // For matches with remainder 1, center the last card
+                  <>
+                    {/* First render all complete rows */}
+                    {matches.slice(0, matches.length - 1).map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-3">
+                        <div className="w-[210px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Then render the last match centered */}
+                    <div className="flex justify-center col-span-3 mt-1">
+                      <div className="w-[210px]">
+                        <MatchPrediction
+                          key={matches[matches.length - 1].id}
+                          match={matches[matches.length - 1]}
+                          onPredictionChange={handlePredictionChange}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // For matches with remainder 2, render normally with placeholders
+                  <>
+                    {matches.map((match: Match) => (
+                      <div key={match.id} className="flex justify-center mb-3">
+                        <div className="w-[210px]">
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Add empty cell for alignment if needed */}
+                    {matches.length % 3 === 2 && (
+                      <div className="flex justify-center opacity-0"></div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : matches.length <= 5 ? (
               // Single row for 5 or fewer matches
-              <div className={`grid gap-4 mx-auto ${
-                matches.length === 1 ? 'grid-cols-1' : 
-                matches.length === 2 ? 'grid-cols-2' :
-                matches.length === 3 ? 'grid-cols-3' :
-                matches.length === 4 ? 'grid-cols-4' :
-                'grid-cols-5 w-full'
-              }`} style={{ width: matches.length <= 4 ? `${matches.length * 230}px` : '100%' }}>
-                {matches.map(match => (
-                  <div key={match.id} style={{ width: '210px', height: '200px' }}>
+              <div className="flex flex-wrap justify-center gap-4 max-w-full md:max-w-none xl:max-w-none lg:max-w-[900px] mx-auto">
+                {matches.map((match: Match) => (
+                  <div key={match.id} style={{ width: '210px' }}>
                     <MatchPrediction
                       key={match.id}
                       match={match}
@@ -1525,113 +1835,220 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             ) : (
               <>
                 {/* First row */}
-                <div className={`grid gap-4 ${
-                  matches.length === 8 ? 'grid-cols-4 w-full' : 
-                  matches.length === 7 ? 'grid-cols-4 w-full' : 
-                  matches.length === 6 ? 'grid-cols-3 w-full' : 
-                  'grid-cols-5 w-full'
-                }`}>
+                <div className="flex flex-wrap justify-center gap-4 mb-4 max-w-full md:max-w-none xl:max-w-none lg:max-w-[900px] mx-auto">
                   {(() => {
                     if (matches.length === 8) {
-                      return matches.slice(0, 4).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
+                      return matches.slice(0, 4).map((match: Match) => (
+                        <div key={match.id} style={{ width: '210px' }}>
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
                       ));
                     } else if (matches.length === 7) {
-                      return matches.slice(0, 4).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
+                      return matches.slice(0, 4).map((match: Match) => (
+                        <div key={match.id} style={{ width: '210px' }}>
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
                       ));
                     } else if (matches.length === 6) {
-                      return matches.slice(0, 3).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
+                      return matches.slice(0, 3).map((match: Match) => (
+                        <div key={match.id} style={{ width: '210px' }}>
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
                       ));
+                    } else if (matches.length === 1) {
+                      // Center a single match
+                      return (
+                        <>
+                          <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                          <div key={matches[0].id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={matches[0].id}
+                              match={matches[0]}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                          <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                        </>
+                      );
+                    } else if (isConstrainedView && matches.length === 3) {
+                      // For constrained view with 3 matches, use special centering
+                      return (
+                        <>
+                          {matches.slice(0, 3).map((match: Match) => (
+                            <div key={match.id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={match.id}
+                                match={match}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                          ))}
+                        </>
+                      );
+                    } else if (isConstrainedView && matches.length === 2) {
+                      // For constrained view with 2 matches, center them
+                      return (
+                        <>
+                          <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                          {matches.slice(0, 2).map((match: Match) => (
+                            <div key={match.id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={match.id}
+                                match={match}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                          ))}
+                          <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                        </>
+                      );
                     } else {
-                      return matches.slice(0, 5).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
+                      // For constrained view, display only first 4, otherwise 5
+                      return matches.slice(0, isConstrainedView ? 4 : 5).map((match: Match) => (
+                        <div key={match.id} style={{ width: '210px' }}>
+                          <MatchPrediction
+                            key={match.id}
+                            match={match}
+                            onPredictionChange={handlePredictionChange}
+                          />
+                        </div>
                       ));
                     }
                   })()}
                 </div>
-
-                {/* Add gap between rows */}
-                <div className="h-6"></div>
 
                 {/* Second row */}
-                <div className={`grid gap-4 ${
-                  matches.length === 8 ? 'grid-cols-4 w-full' : 
-                  matches.length === 7 ? 'grid-cols-3 w-full' : 
-                  matches.length === 6 ? 'grid-cols-3 w-full' : 
-                  matches.length === 9 ? 'grid-cols-4 w-full' : 
-                  'grid-cols-5 w-full'
-                }`}>
-                  {(() => {
-                    if (matches.length === 8) {
-                      return matches.slice(4).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
-                      ));
-                    } else if (matches.length === 7) {
-                      return matches.slice(4).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
-                      ));
-                    } else if (matches.length === 6) {
-                      return matches.slice(3).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
-                      ));
-                    } else {
-                      return matches.slice(5).map(match => (
-                        <MatchPrediction
-                          key={match.id}
-                          match={match}
-                          onPredictionChange={handlePredictionChange}
-                        />
-                      ));
-                    }
-                  })()}
-                </div>
+                {matches.length > (isConstrainedView ? 4 : 5) && (
+                  <div className="flex flex-wrap justify-center gap-4 max-w-full md:max-w-none xl:max-w-none lg:max-w-[900px] mx-auto">
+                    {(() => {
+                      if (matches.length === 8) {
+                        return matches.slice(4).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      } else if (matches.length === 7) {
+                        return matches.slice(4).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      } else if (matches.length === 6) {
+                        return matches.slice(3).map((match: Match) => (
+                          <div key={match.id} style={{ width: '210px' }}>
+                            <MatchPrediction
+                              key={match.id}
+                              match={match}
+                              onPredictionChange={handlePredictionChange}
+                            />
+                          </div>
+                        ));
+                      } else if (isConstrainedView && matches.length === 5) {
+                        // For constrained view with 5 matches, last match centered
+                        return (
+                          <>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                            <div key={matches[4].id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={matches[4].id}
+                                match={matches[4]}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                            <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                          </>
+                        );
+                      } else {
+                        // Calculate remaining matches
+                        const remainingMatches = matches.length - (isConstrainedView ? 4 : 5);
+                        
+                        if (remainingMatches === 1) {
+                          // Center a single match
+                          const matchIndex = isConstrainedView ? 4 : 5;
+                          return (
+                            <>
+                              <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                              <div key={matches[matchIndex].id} style={{ width: '210px' }}>
+                                <MatchPrediction
+                                  key={matches[matchIndex].id}
+                                  match={matches[matchIndex]}
+                                  onPredictionChange={handlePredictionChange}
+                                />
+                              </div>
+                              <div style={{ width: 'calc(50% - 105px)', minWidth: '15px' }}></div>
+                            </>
+                          );
+                        } else if (remainingMatches === 2) {
+                          // Center two matches
+                          const startIndex = isConstrainedView ? 4 : 5;
+                          return (
+                            <>
+                              <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                              {matches.slice(startIndex, startIndex + 2).map((match: Match) => (
+                                <div key={match.id} style={{ width: '210px' }}>
+                                  <MatchPrediction
+                                    key={match.id}
+                                    match={match}
+                                    onPredictionChange={handlePredictionChange}
+                                  />
+                                </div>
+                              ))}
+                              <div style={{ width: 'calc(50% - 210px)', minWidth: '15px' }}></div>
+                            </>
+                          );
+                        } else {
+                          // For constrained view, start from the 5th, otherwise 6th
+                          return matches.slice(isConstrainedView ? 4 : 5).map((match: Match) => (
+                            <div key={match.id} style={{ width: '210px' }}>
+                              <MatchPrediction
+                                key={match.id}
+                                match={match}
+                                onPredictionChange={handlePredictionChange}
+                              />
+                            </div>
+                          ));
+                        }
+                      }
+                    })()}
+                  </div>
+                )}
               </>
             )}
           </>
         )}
       </div>
 
-      <div className="flex justify-center space-x-4 mt-8">
+      <div className={`flex justify-center ${(isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView) ? 'space-x-2 mt-4' : 'space-x-4 mt-8'}`}>
         <button
           onClick={handleSubmit}
-          className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+          className={`${(isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView) ? 'px-4 py-1.5 text-sm border border-[#f7e479]' : 'px-8 py-2 border-2 border-[#f7e479]'} bg-transparent text-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold`}
           disabled={isProcessing || loading}
         >
           Submit Predictions
         </button>
         <button
           onClick={handleViewStandings}
-          className="px-8 py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+          className={`${(isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView) ? 'px-4 py-1.5 text-sm border border-[#f7e479]' : 'px-8 py-2 border-2 border-[#f7e479]'} bg-transparent text-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold`}
           disabled={isProcessing || loading}
         >
           View Standings
