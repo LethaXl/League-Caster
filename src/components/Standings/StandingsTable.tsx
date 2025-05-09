@@ -703,7 +703,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     const isSelectedTeam = selectedTeamIds?.includes(standing.team.id);
     const highlightRow = isRaceMode && tableDisplayMode === 'full' && isSelectedTeam;
     
-    return `${highlightRow ? 'bg-[#f7e479]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
+    return `${highlightRow ? 'bg-[#FFD700]/10 border-l-4 border-[#FFD700]' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
             hover:bg-black/10 transition-all duration-300 ease-in-out`;
   };
 

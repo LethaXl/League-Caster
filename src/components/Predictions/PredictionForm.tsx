@@ -33,7 +33,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     setIsViewingStandings,
     isRaceMode,
     selectedTeamIds,
-    unfilteredMatchesMode
+    unfilteredMatchesMode,
+    tableDisplayMode,
+    setTableDisplayMode
   } = usePrediction();
 
   const [matches, setMatches] = useState<Match[]>([]);
@@ -43,6 +45,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const [isProcessing, setIsProcessing] = useState(false);
   // Add state for screen width tracking
   const [screenWidth, setScreenWidth] = useState(0);
+  // Add a state for mini table toggle
+  const [showMiniTable, setShowMiniTable] = useState(() => {
+    // Initialize based on tableDisplayMode from context
+    return tableDisplayMode === 'mini';
+  });
   
   // Track screen width for responsive layouts
   useEffect(() => {
@@ -995,6 +1002,14 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     // Store the previous matchday in localStorage for reference (the one whose results we're viewing)
     const previousMatchday = currentMatchday > 1 ? currentMatchday - 1 : 1;
     localStorage.setItem('viewingCurrentStandingsFrom', String(previousMatchday));
+    // We no longer need to handle the showMiniTable state separately since we're using context
+  };
+
+  // Add toggle function for mini table
+  const toggleMiniTable = () => {
+    const newMode = tableDisplayMode === 'mini' ? 'full' : 'mini';
+    setShowMiniTable(newMode === 'mini');
+    setTableDisplayMode(newMode);
   };
 
   // Add this handler function right after handleViewStandings
@@ -1018,6 +1033,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     // Update the current matchday - this will trigger fetchMatches via useEffect
     setCurrentMatchday(nextMatchday);
   }, [currentMatchday, leagueCode, MAX_MATCHDAY, setCurrentMatchday, setIsViewingStandings]);
+
+  // Effect to sync showMiniTable with tableDisplayMode from context
+  useEffect(() => {
+    setShowMiniTable(tableDisplayMode === 'mini');
+  }, [tableDisplayMode]);
 
   if (loading) {
     return (

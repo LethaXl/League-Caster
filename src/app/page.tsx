@@ -1230,8 +1230,7 @@ export default function Home() {
             />
             
             {/* Table display toggle - at the bottom of the table */}
-            {isRaceMode && isViewingStandings && 
-             (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) && (
+            {isRaceMode && isViewingStandings && (
               <div className="flex justify-center items-center mt-4">
                 <div className="inline-flex rounded-md">
                   <button 
