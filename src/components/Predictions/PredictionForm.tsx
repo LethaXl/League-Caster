@@ -727,7 +727,13 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       // Find matches that were filtered out (not in the current matches list)
       const filteredMatches = new Set(matches.map(m => m.id));
-      const unfilteredMatches = allMatches.filter(m => !filteredMatches.has(m.id));
+      const unfilteredMatches = allMatches
+        .filter(m => !filteredMatches.has(m.id))
+        .filter(m => {
+          // Only include matches that have not already been played
+          const matchDate = new Date(m.utcDate);
+          return matchDate > new Date();
+        });
       
       if (unfilteredMatches.length === 0) return updatedStandings;
       
@@ -858,7 +864,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     }));
 
     // Process predictions and update standings
-    matches.forEach(match => {
+    // Only process matches that have not already been played
+    const unplayedMatches = filterAlreadyPlayedMatches(matches);
+
+    unplayedMatches.forEach(match => {
       const prediction = predictions.get(match.id);
       if (prediction) {
         const [homeResult, awayResult] = processMatchPrediction(
