@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { PredictionProvider } from "@/contexts/PredictionContext";
 import InitialStateCleaner from '@/components/InitialStateCleaner';
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,6 +31,8 @@ export default function RootLayout({
         <PredictionProvider>
           <InitialStateCleaner />
           {children}
+          <SpeedInsights />
+          <Analytics />
         </PredictionProvider>
       </body>
     </html>
