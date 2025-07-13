@@ -54,8 +54,7 @@ export default function Home() {
   const [showPredictionSummary, setShowPredictionSummary] = useState(false);
   const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
   const [matchPredictions, setMatchPredictions] = useState<Map<number, Prediction>>(new Map());
-  const [seasonOver, setSeasonOver] = useState(true); // Temporary state for season over message
-  const [showSeasonOverPopup, setShowSeasonOverPopup] = useState(false); // Show wholesome popup
+  const [seasonOver, setSeasonOver] = useState(false); // Season is active
   
   // Cache for API data to reduce calls
   const matchdayCache = useRef<Map<string, number>>(new Map());
@@ -263,11 +262,6 @@ export default function Home() {
 
   const handleStartPredictions = async () => {
     if (!selectedLeague) return;
-    
-    if (seasonOver) {
-      setShowSeasonOverPopup(true);
-      return;
-    }
     
     // Reset all race mode settings when starting predictions
     setIsRaceMode(false);
@@ -548,28 +542,7 @@ export default function Home() {
     setShowPredictionSummary(true);
   }, [collectCompletedMatches]);
 
-  if (showSeasonOverPopup) {
-    return (
-      <div className="min-h-screen p-8 bg-background flex items-center justify-center">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-card rounded-lg p-8 text-center shadow-lg border border-[#f7e479]/20">
-            <h3 className="text-2xl font-bold text-[#f7e479] mb-4">Season Complete!</h3>
-            <p className="mt-2 text-secondary text-m mb-6">
-              See you in August!
-            </p>
-            <div className="flex justify-center">
-              <button
-                onClick={() => setShowSeasonOverPopup(false)}
-                className="px-8 py-2 rounded-full font-semibold border-2 border-[#f7e479] text-[#f7e479] bg-transparent hover:bg-[#f7e479] hover:text-black transition-all duration-300"
-              >
-                Back
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   if (error) {
     return (
@@ -615,7 +588,7 @@ export default function Home() {
         </div>
         <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-8">
           <div className="text-center mt-10 text-white font-medium text-lg">
-            Season 2024/2025
+            Season 2025/2026
             <div className="mt-1 text-xs text-gray-400">Last Updated: {formattedDate}</div>
           </div>
         </div>
