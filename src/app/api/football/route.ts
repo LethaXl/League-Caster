@@ -52,18 +52,19 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     
-  } catch (error: any) {
-    console.error('❌ API Error:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ API Error:', errorMessage);
     
     // Return more specific error messages
-    if (error.message.includes('API_KEY')) {
+    if (errorMessage.includes('API_KEY')) {
       return NextResponse.json(
         { error: 'API configuration error', details: 'Missing or invalid API key' },
         { status: 500 }
       );
     }
     
-    if (error.message.includes('rate limit')) {
+    if (errorMessage.includes('rate limit')) {
       return NextResponse.json(
         { error: 'Rate limit exceeded', details: 'Please try again later' },
         { status: 429 }
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { 
         error: 'Failed to fetch data',
-        details: error.message,
+        details: errorMessage,
         source: 'upstash_redis_cache'
       },
       { status: 500 }

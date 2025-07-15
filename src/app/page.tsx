@@ -10,6 +10,7 @@ import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData }
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
 import { Prediction } from '@/types/predictions';
+import Image from 'next/image';
 
 // Interface for API error responses
 interface ApiError {
@@ -1103,9 +1104,11 @@ export default function Home() {
                   if (!league) return null;
                   return (
                     <div className="flex items-center gap-2 sm:gap-4">
-                      <img
+                      <Image
                         src={league.image}
                         alt={league.name}
+                        width={92}
+                        height={92}
                         className="w-12 h-12 xs:w-15 xs:h-15 sm:w-19 sm:h-19 md:w-23 md:h-23 object-contain"
                         style={{ maxWidth: '3.5rem', maxHeight: '3.5rem' }} 
                       />

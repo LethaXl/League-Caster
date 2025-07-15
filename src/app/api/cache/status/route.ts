@@ -11,11 +11,12 @@ export async function GET() {
       status: 'healthy',
       message: 'Vercel KV cache is working'
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { 
         error: 'Failed to get cache stats', 
-        details: error.message,
+        details: errorMessage,
         timestamp: Date.now(),
         status: 'error'
       },

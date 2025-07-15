@@ -16,13 +16,14 @@ export async function POST(
       timestamp: Date.now(),
       league: params.league
     });
-  } catch (error: any) {
-    console.error(`❌ Cache refresh failed for ${params.league}:`, error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`❌ Cache refresh failed for ${params.league}:`, errorMessage);
     
     return NextResponse.json(
       { 
         error: 'Failed to refresh data', 
-        details: error.message,
+        details: errorMessage,
         timestamp: Date.now(),
         league: params.league
       },
