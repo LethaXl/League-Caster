@@ -1266,11 +1266,17 @@ export default function Home() {
           />
         ) : (
           <div className="bg-card rounded-lg p-6 mx-1 sm:mx-2 md:mx-3 mb-4 sm:mb-6">
-            <PredictionForm
-              leagueCode={selectedLeague || ''}
-              initialStandings={standings}
-              initialMatches={initialMatches}
-            />
+            {selectedLeague ? (
+              <PredictionForm
+                leagueCode={selectedLeague}
+                initialStandings={standings}
+                initialMatches={initialMatches}
+              />
+            ) : (
+              <div className="text-center py-8 text-red-500 font-bold">
+                Please select a league before starting predictions.
+              </div>
+            )}
           </div>
         )}
         

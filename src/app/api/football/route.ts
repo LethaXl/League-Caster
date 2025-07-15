@@ -1,139 +1,82 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
-
-const API_BASE_URL = 'https://api.football-data.org/v4';
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  console.error('API_KEY environment variable is not set!');
-}
-
-console.log('API Configuration:', {
-  baseUrl: API_BASE_URL,
-  hasApiKey: !!API_KEY,
-});
-
-const footballApi = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'X-Auth-Token': API_KEY,
-  },
-});
-
-// Define interface for match data from API
-interface ApiMatch {
-  status: string;
-  matchday: number;
-  // Add other properties as needed
-}
+import { footballDataManager } from '@/lib/services/FootballDataManager';
 
 export async function GET(request: Request) {
-  if (!API_KEY) {
-    console.error('API_KEY is not defined in environment variables');
-    return NextResponse.json(
-      { error: 'API configuration error - Missing API key' },
-      { status: 500 }
-    );
-  }
-
   const { searchParams } = new URL(request.url);
   const endpoint = searchParams.get('endpoint');
   const matchday = searchParams.get('matchday');
   const combined = searchParams.get('combined');
+  const leagueCode = searchParams.get('leagueCode');
 
-  if (!endpoint && !combined) {
-    return NextResponse.json({ error: 'Endpoint or combined parameter is required' }, { status: 400 });
+  if (!leagueCode) {
+    return NextResponse.json({ error: 'leagueCode is required' }, { status: 400 });
   }
 
   try {
-    // Handle combined data requests
+    console.log(`🔍 API Request: ${endpoint || combined} for ${leagueCode}`);
+    
+    // Handle combined data requests (most common)
     if (combined === 'league_data') {
-      const leagueCode = searchParams.get('leagueCode');
-      
-      if (!leagueCode) {
-        return NextResponse.json({ error: 'leagueCode is required for combined requests' }, { status: 400 });
-      }
-      
-      console.log('Making combined API request for league:', leagueCode);
-      
-      // Make parallel requests for standings and matches
-      const [standingsResponse, matchesResponse] = await Promise.all([
-        footballApi.get(`/competitions/${leagueCode}/standings`),
-        footballApi.get(`/competitions/${leagueCode}/matches`)
+      const [standings, currentMatchday] = await Promise.all([
+        footballDataManager.getStandings(leagueCode),
+        footballDataManager.getCurrentMatchday(leagueCode)
       ]);
       
-      // Extract and process data
-      const standings = standingsResponse.data.standings[0].table;
-      
-      const scheduledMatches = matchesResponse.data.matches.filter(
-        (m: ApiMatch) => m.status === 'SCHEDULED' || m.status === 'TIMED'
-      );
-      
-      const currentMatchday = scheduledMatches.length > 0
-        ? Math.min(...scheduledMatches.map((m: ApiMatch) => m.matchday))
-        : 1;
-      
-      // Return the combined data
       return NextResponse.json({
         standings,
         currentMatchday,
-        success: true
+        success: true,
+        source: 'upstash_redis_cache'
       });
     }
 
-    // Original single endpoint handling
-    let url = endpoint;
-    if (matchday) {
-      url += `?matchday=${matchday}`;
+    // Handle individual endpoints
+    if (endpoint) {
+      if (endpoint.includes('/standings')) {
+        const standings = await footballDataManager.getStandings(leagueCode);
+        return NextResponse.json({ 
+          standings: [{ table: standings }],
+          source: 'upstash_redis_cache'
+        });
+      }
+      
+      if (endpoint.includes('/matches')) {
+        const matchdayNum = matchday ? parseInt(matchday) : undefined;
+        const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
+        return NextResponse.json({ 
+          matches,
+          source: 'upstash_redis_cache'
+        });
+      }
     }
 
-    console.log('Making API request:', {
-      url,
-      hasMatchday: !!matchday,
-    });
-
-    // Ensure url is not null before making the request
-    if (!url) {
-      return NextResponse.json(
-        { error: 'Endpoint parameter is required' },
-        { status: 400 }
-      );
-    }
-
-    const response = await footballApi.get(url);
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     
-    if (!response.data) {
-      console.error('Empty response from football API');
+  } catch (error: any) {
+    console.error('❌ API Error:', error);
+    
+    // Return more specific error messages
+    if (error.message.includes('API_KEY')) {
       return NextResponse.json(
-        { error: 'Empty response from football API' },
+        { error: 'API configuration error', details: 'Missing or invalid API key' },
         { status: 500 }
       );
     }
-
-    return NextResponse.json(response.data);
-  } catch (error: unknown) {
-    const err = error as { 
-      message: string; 
-      response?: { 
-        data?: { message?: string }; 
-        status?: number; 
-      }; 
-    };
     
-    console.error('API Error:', {
-      message: err.message,
-      response: err.response?.data,
-      status: err.response?.status,
-    });
-
-    // Return more detailed error information
+    if (error.message.includes('rate limit')) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', details: 'Please try again later' },
+        { status: 429 }
+      );
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Failed to fetch data from football API',
-        details: err.response?.data?.message || err.message,
-        status: err.response?.status
+        error: 'Failed to fetch data',
+        details: error.message,
+        source: 'upstash_redis_cache'
       },
-      { status: err.response?.status || 500 }
+      { status: 500 }
     );
   }
 } 

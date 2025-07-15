@@ -1,0 +1,130 @@
+import axios from 'axios';
+import { cacheService } from '@/lib/cache/CacheService';
+
+export interface FootballApiData {
+  standings: any[];
+  matches: any[];
+  currentMatchday: number;
+  lastUpdated: number;
+  source: 'cache' | 'api';
+}
+
+export class FootballDataManager {
+  private readonly API_BASE_URL = 'https://api.football-data.org/v4';
+  private readonly API_KEY = process.env.API_KEY;
+  private readonly LEAGUES = ['PL', 'BL1', 'FL1', 'SA', 'PD'];
+  
+  private apiClient = axios.create({
+    baseURL: this.API_BASE_URL,
+    headers: { 'X-Auth-Token': this.API_KEY },
+    timeout: 10000
+  });
+
+  async getLeagueData(leagueCode: string): Promise<FootballApiData> {
+    const cacheKey = `league_${leagueCode}`;
+    
+    // Try cache first
+    let data = await cacheService.get<FootballApiData>(cacheKey);
+    
+    if (data) {
+      // Only log cache hit if in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📊 Cache hit for ${leagueCode}`);
+      }
+      return { ...data, source: 'cache' };
+    }
+    
+    // Cache miss - fetch from API
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔄 Cache miss for ${leagueCode}, fetching from API...`);
+    }
+    data = await this.fetchFromAPI(leagueCode);
+    
+    // Cache for 10 minutes (longer TTL to reduce API calls)
+    await cacheService.set(cacheKey, data, 600);
+    
+    return { ...data, source: 'api' };
+  }
+
+  private async fetchFromAPI(leagueCode: string): Promise<FootballApiData> {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🌐 Fetching ${leagueCode} data from football-data.org...`);
+      }
+      
+      // Make parallel API calls
+      const [standingsResponse, matchesResponse] = await Promise.all([
+        this.apiClient.get(`/competitions/${leagueCode}/standings`),
+        this.apiClient.get(`/competitions/${leagueCode}/matches`)
+      ]);
+
+      // Process standings
+      const standings = standingsResponse.data.standings[0].table;
+      
+      // Process matches - filter for upcoming matches only
+      const allMatches = matchesResponse.data.matches;
+      const now = new Date();
+      
+      const upcomingMatches = allMatches.filter((match: any) => {
+        const matchDate = new Date(match.utcDate);
+        const isUpcoming = matchDate > now;
+        const isValidStatus = ['SCHEDULED', 'TIMED'].includes(match.status);
+        return isUpcoming && isValidStatus;
+      });
+
+      // Calculate current matchday
+      const currentMatchday = upcomingMatches.length > 0
+        ? Math.min(...upcomingMatches.map((m: any) => m.matchday))
+        : 1;
+
+      const data: FootballApiData = {
+        standings,
+        matches: upcomingMatches,
+        currentMatchday,
+        lastUpdated: Date.now(),
+        source: 'api'
+      };
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Fetched ${leagueCode}: ${upcomingMatches.length} matches, matchday ${currentMatchday}`);
+      }
+      return data;
+      
+    } catch (error: any) {
+      console.error(`❌ API Error for ${leagueCode}:`, error.response?.data || error.message);
+      throw new Error(`Failed to fetch ${leagueCode} data: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  async getMatches(leagueCode: string, matchday?: number): Promise<any[]> {
+    const data = await this.getLeagueData(leagueCode);
+    
+    if (matchday) {
+      return data.matches.filter(match => match.matchday === matchday);
+    }
+    
+    return data.matches;
+  }
+
+  async getStandings(leagueCode: string): Promise<any[]> {
+    const data = await this.getLeagueData(leagueCode);
+    return data.standings;
+  }
+
+  async getCurrentMatchday(leagueCode: string): Promise<number> {
+    const data = await this.getLeagueData(leagueCode);
+    return data.currentMatchday;
+  }
+
+  async refreshLeagueData(leagueCode: string): Promise<void> {
+    console.log(`🔄 Manually refreshing ${leagueCode} data...`);
+    await cacheService.invalidate(`league_${leagueCode}`);
+    await this.getLeagueData(leagueCode);
+  }
+
+  async getCacheStats(): Promise<any> {
+    return await cacheService.getCacheStats();
+  }
+}
+
+export const footballDataManager = new FootballDataManager(); 

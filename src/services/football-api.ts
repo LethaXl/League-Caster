@@ -183,7 +183,8 @@ export const getStandings = async (leagueCode: string): Promise<Standing[]> => {
   return queueRequest(async () => {
     const response = await api.get('', {
       params: {
-        endpoint: `/competitions/${leagueCode}/standings`
+        endpoint: `/competitions/${leagueCode}/standings`,
+        leagueCode // Always include leagueCode
       }
     });
     
@@ -205,7 +206,8 @@ export const getMatches = async (leagueCode: string, matchday: number): Promise<
     const response = await api.get('', {
       params: {
         endpoint: `/competitions/${leagueCode}/matches`,
-        matchday
+        matchday,
+        leagueCode // Always include leagueCode
       }
     });
     
@@ -242,7 +244,8 @@ export const getCurrentMatchday = async (leagueCode: string): Promise<number> =>
   return queueRequest(async () => {
     const response = await api.get('', {
       params: {
-        endpoint: `/competitions/${leagueCode}/matches`
+        endpoint: `/competitions/${leagueCode}/matches`,
+        leagueCode // Always include leagueCode
       }
     });
     
