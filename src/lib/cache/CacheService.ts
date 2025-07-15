@@ -42,7 +42,8 @@ export class CacheService {
       // If value is already an object, return its data property or itself
       if (typeof value === 'object') {
         // Upstash may return the object directly
-        return (value as any).data ?? value;
+        const cacheEntry = value as CacheEntry<T>;
+        return cacheEntry.data ?? (value as T);
       }
 
       // Otherwise, parse as JSON

@@ -1,9 +1,11 @@
 import axios from 'axios';
 import { cacheService } from '@/lib/cache/CacheService';
+import { Match } from '@/types/predictions';
+import { Standing } from '@/types/standings';
 
 export interface FootballApiData {
-  standings: any[];
-  matches: any[];
+  standings: Standing[];
+  matches: Match[];
   currentMatchday: number;
   lastUpdated: number;
   source: 'cache' | 'api';
@@ -65,7 +67,7 @@ export class FootballDataManager {
       const allMatches = matchesResponse.data.matches;
       const now = new Date();
       
-      const upcomingMatches = allMatches.filter((match: any) => {
+      const upcomingMatches = allMatches.filter((match: Match) => {
         const matchDate = new Date(match.utcDate);
         const isUpcoming = matchDate > now;
         const isValidStatus = ['SCHEDULED', 'TIMED'].includes(match.status);
@@ -74,7 +76,7 @@ export class FootballDataManager {
 
       // Calculate current matchday
       const currentMatchday = upcomingMatches.length > 0
-        ? Math.min(...upcomingMatches.map((m: any) => m.matchday))
+        ? Math.min(...upcomingMatches.map((m: Match) => m.matchday))
         : 1;
 
       const data: FootballApiData = {
@@ -90,13 +92,15 @@ export class FootballDataManager {
       }
       return data;
       
-    } catch (error: any) {
-      console.error(`❌ API Error for ${leagueCode}:`, error.response?.data || error.message);
-      throw new Error(`Failed to fetch ${leagueCode} data: ${error.response?.data?.message || error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const responseData = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      console.error(`❌ API Error for ${leagueCode}:`, responseData || errorMessage);
+      throw new Error(`Failed to fetch ${leagueCode} data: ${responseData || errorMessage}`);
     }
   }
 
-  async getMatches(leagueCode: string, matchday?: number): Promise<any[]> {
+  async getMatches(leagueCode: string, matchday?: number): Promise<Match[]> {
     const data = await this.getLeagueData(leagueCode);
     
     if (matchday) {
@@ -106,7 +110,7 @@ export class FootballDataManager {
     return data.matches;
   }
 
-  async getStandings(leagueCode: string): Promise<any[]> {
+  async getStandings(leagueCode: string): Promise<Standing[]> {
     const data = await this.getLeagueData(leagueCode);
     return data.standings;
   }
@@ -122,7 +126,7 @@ export class FootballDataManager {
     await this.getLeagueData(leagueCode);
   }
 
-  async getCacheStats(): Promise<any> {
+  async getCacheStats(): Promise<{ keys: string[]; count: number }> {
     return await cacheService.getCacheStats();
   }
 }
