@@ -26,6 +26,7 @@
 - **API Integration:** [Football-Data.org API](https://www.football-data.org/) with Axios
 - **Hosting:** Deployed on [Vercel](https://vercel.com/) for optimal Next.js performance
 - **Caching:** [Upstash Redis](https://upstash.com/) server-side caching with 10-minute TTL
+- **SEO:** Comprehensive optimization with structured data, sitemaps, and meta tags
 - **Data Processing:** Real-time standings calculation based on user predictions
 - **Scalability:** Handles 50+ concurrent users with intelligent cache management
 
