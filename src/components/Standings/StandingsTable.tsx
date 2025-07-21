@@ -677,7 +677,19 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   console.log("StandingsTable - Race mode state:", isRaceMode, "TableDisplayMode:", tableDisplayMode, "SelectedTeamIds:", selectedTeamIds?.length || 0);
   
   // Sort the standings by position to ensure correct display order
-  const sortedStandings = visibleStandings.sort((a, b) => a.position - b.position);
+  let sortedStandings: Standing[];
+  if (
+    visibleStandings.length > 0 &&
+    visibleStandings.every(s => s.position === 1)
+  ) {
+    // All teams are at position 1, so sort alphabetically by team name and assign positions 1-N
+    sortedStandings = [...visibleStandings]
+      .sort((a, b) => a.team.name.localeCompare(b.team.name))
+      .map((standing, idx) => ({ ...standing, position: idx + 1 }));
+  } else {
+    // Normal sorting by position
+    sortedStandings = [...visibleStandings].sort((a, b) => a.position - b.position);
+  }
 
   // Set column widths based on screen size
   const getColumnClass = (index: number) => {
