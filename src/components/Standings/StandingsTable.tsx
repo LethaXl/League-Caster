@@ -44,6 +44,8 @@ function getEuropeanCompetition(position: number, leagueCode?: string) {
       if (position === 5) return 'uel_logo.png';
       if (position === 6) return 'uecl_logo.png';
       return null;
+    case 'CL': // Champions League - no logos shown
+      return null;
     default:
       return null;
   }
@@ -714,6 +716,27 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   const getRowStyle = (standing: Standing, index: number) => {
     const isSelectedTeam = selectedTeamIds?.includes(standing.team.id);
     const highlightRow = isRaceMode && tableDisplayMode === 'full' && isSelectedTeam;
+    
+    // UCL-specific border indicators with alternating row colors
+    let uclBorderClass = '';
+    let uclBackgroundClass = '';
+    if (leagueCode === 'CL') {
+      // Add alternating row colors
+      uclBackgroundClass = index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]';
+      
+      // Add border indicators
+      if (standing.position <= 8) {
+        uclBorderClass = 'border-l-4 border-green-500'; // Green border for positions 1-8 (Champions League)
+      } else if (standing.position >= 9 && standing.position <= 24) {
+        uclBorderClass = 'border-l-4 border-blue-500'; // Blue border for positions 9-24 (Playoffs)
+      }
+    }
+    
+    // If UCL has specific styling, use it; otherwise use default styling
+    if (leagueCode === 'CL') {
+      return `${highlightRow ? 'bg-[#FFD700]/10 border-l-4 border-[#FFD700]' : `${uclBackgroundClass} ${uclBorderClass}`} 
+              hover:bg-black/10 transition-all duration-300 ease-in-out`;
+    }
     
     return `${highlightRow ? 'bg-[#FFD700]/10 border-l-4 border-[#FFD700]' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
             hover:bg-black/10 transition-all duration-300 ease-in-out`;

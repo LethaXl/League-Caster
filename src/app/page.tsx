@@ -31,9 +31,9 @@ const getMaxMatchday = (leagueCode: string): number => {
   if (leagueCode === 'BL1' || leagueCode === 'FL1') {
     return 34;
   }
-  // Champions League has group stage (6 matchdays) + knockout rounds (up to 7 more matchdays)
+  // Champions League has league phase up to matchday 8 (25-26 season format)
   if (leagueCode === 'CL') {
-    return 13; // 6 group stage + 7 knockout rounds (R16, QF, SF, Final)
+    return 8;
   }
   // Premier League, La Liga, Serie A have 20 teams (38 matchdays)
   return 38;
@@ -582,7 +582,7 @@ export default function Home() {
     const formattedDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
     
     return (
-      <main className="min-h-screen bg-background overflow-hidden">
+      <main className="min-h-screen bg-background overflow-x-hidden overflow-y-hidden md:overflow-y-auto">
         <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-8 pt-8">
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold text-primary mb-4">League Caster</h1>
@@ -1098,7 +1098,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen w-full pt-6 pb-1 sm:p-8 bg-background">
+    <main className="min-h-screen w-full pt-6 pb-1 sm:p-8 bg-background overflow-x-hidden overflow-y-hidden md:overflow-y-auto">
       <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-0">
         <div className="flex justify-between items-center mb-8">
           <div className="ml-6 sm:ml-0">

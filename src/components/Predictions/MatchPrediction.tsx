@@ -8,7 +8,11 @@ interface MatchPredictionProps {
 }
 
 // Team name mapping for display purposes
-const getDisplayName = (name: string): string => {
+const getDisplayName = (name: string | null | undefined): string => {
+  if (!name) {
+    return 'Unknown Team';
+  }
+  
   if (name === 'Wolverhampton Wanderers FC') return 'Wolves';
   if (name === 'RCD Espanyol de Barcelona') return 'RCD Espanyol';
   if (name === 'Club Atlético de Madrid') return 'Atletico Madrid';
@@ -39,11 +43,16 @@ export default function MatchPrediction({ match, onPredictionChange }: MatchPred
   }, []);
   
   // Get team names with preference for shortName
-  const homeTeamName = match.homeTeam.shortName || getDisplayName(match.homeTeam.name);
-  const awayTeamName = match.awayTeam.shortName || getDisplayName(match.awayTeam.name);
+  const homeTeamName = match.homeTeam?.shortName || getDisplayName(match.homeTeam?.name) || 'Home Team';
+  const awayTeamName = match.awayTeam?.shortName || getDisplayName(match.awayTeam?.name) || 'Away Team';
 
   // Only use truncation for custom score view
-  const truncateTeamName = (name: string) => {
+  const truncateTeamName = (name: string | null | undefined) => {
+    // Handle null/undefined values
+    if (!name) {
+      return 'Unknown Team';
+    }
+    
     if (isVeryTinyScreen && predictionType === 'custom') {
       // Super strict truncation for custom mode on very tiny screens
       if (name.length > 4) {

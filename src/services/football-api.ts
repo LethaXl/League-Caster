@@ -171,7 +171,7 @@ export const getLeagues = async (): Promise<League[]> => {
     }
     
     return response.data.competitions
-      .filter((comp: ApiCompetition) => ['PL', 'BL1', 'FL1', 'SA', 'PD'].includes(comp.code))
+      .filter((comp: ApiCompetition) => ['PL', 'BL1', 'FL1', 'SA', 'PD', 'CL'].includes(comp.code))
       .map((comp: ApiCompetition) => ({
         ...comp,
         name: LEAGUE_NAME_MAPPING[comp.name] || comp.name
@@ -260,9 +260,33 @@ export const getCurrentMatchday = async (leagueCode: string): Promise<number> =>
     const scheduledMatches = response.data.matches.filter(
       (m: ApiMatch) => m.status === 'SCHEDULED' || m.status === 'TIMED'
     );
-    return scheduledMatches.length > 0
-      ? Math.min(...scheduledMatches.map((m: ApiMatch) => m.matchday))
-      : 1;
+    
+    if (scheduledMatches.length === 0) {
+      return 1;
+    }
+    
+    // For UCL, start from matchday 4 (current matchday in 25-26 season)
+    if (leagueCode === 'CL') {
+      // Find the current matchday by looking for the earliest upcoming matchday >= 4
+      const upcomingMatchdays = scheduledMatches.map((m: ApiMatch) => m.matchday);
+      const filteredMatchdays = upcomingMatchdays.filter((md: number) => md >= 4);
+      
+      if (filteredMatchdays.length === 0) {
+        return 4;
+      }
+      
+      const currentMatchday = Math.min(...filteredMatchdays);
+      
+      // Handle case where API returns 0 or invalid matchday
+      if (currentMatchday === 0 || currentMatchday < 4) {
+        return 4;
+      }
+      
+      return currentMatchday;
+    }
+    
+    // For other leagues, use the minimum upcoming matchday
+    return Math.min(...scheduledMatches.map((m: ApiMatch) => m.matchday));
   });
 };
 

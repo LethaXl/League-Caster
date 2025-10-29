@@ -393,7 +393,7 @@ export default function PredictionSummary({
                           className="object-contain"
                         />
                       </div>
-                      <span className={isMobileSConstrainedView ? 'text-[8px]' : 'text-[10px]'}>{team.shortName || team.name}</span>
+                      <span className={isMobileSConstrainedView ? 'text-[8px]' : 'text-[10px]'}>{team.shortName || team.name || 'Unknown Team'}</span>
                     </div>
                   </th>
                 );
@@ -562,7 +562,7 @@ export default function PredictionSummary({
                                   className="object-contain"
                                 />
                               </div>
-                              <span className="text-xs">{team.shortName || team.name}</span>
+                              <span className="text-xs">{team.shortName || team.name || 'Unknown Team'}</span>
                             </div>
                           </th>
                         );

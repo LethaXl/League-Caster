@@ -108,10 +108,11 @@ export function PredictionProvider({ children }: { children: React.ReactNode }) 
     localStorage.removeItem('completedMatches');
     
     // Clear matchday cache for all leagues to ensure fresh data load
-    ['PL', 'BL1', 'FL1', 'SA', 'PD'].forEach(league => {
+    ['PL', 'BL1', 'FL1', 'SA', 'PD', 'CL'].forEach(league => {
       localStorage.removeItem(`${league}_initialFetchDone`);
       localStorage.removeItem(`matchdayCache_${league}`);
       localStorage.removeItem(`cacheLastRefreshed_${league}`);
+      localStorage.removeItem(`teamNameMappingCleared_${league}`);
       console.log(`Cleared cache for ${league} during reset`);
     });
     

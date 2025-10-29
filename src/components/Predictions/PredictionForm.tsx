@@ -20,6 +20,10 @@ const getMaxMatchday = (leagueCode: string): number => {
   if (leagueCode === 'BL1' || leagueCode === 'FL1') {
     return 34;
   }
+  // Champions League has league phase up to matchday 8 (25-26 season format)
+  if (leagueCode === 'CL') {
+    return 8;
+  }
   // Premier League, La Liga, Serie A have 20 teams (38 matchdays)
   return 38;
 };

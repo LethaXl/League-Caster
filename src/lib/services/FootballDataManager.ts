@@ -14,7 +14,7 @@ export interface FootballApiData {
 export class FootballDataManager {
   private readonly API_BASE_URL = 'https://api.football-data.org/v4';
   private readonly API_KEY = process.env.API_KEY;
-  private readonly LEAGUES = ['PL', 'BL1', 'FL1', 'SA', 'PD'];
+  private readonly LEAGUES = ['PL', 'BL1', 'FL1', 'SA', 'PD', 'CL'];
   
   private apiClient = axios.create({
     baseURL: this.API_BASE_URL,
@@ -75,9 +75,26 @@ export class FootballDataManager {
       });
 
       // Calculate current matchday
-      const currentMatchday = upcomingMatches.length > 0
-        ? Math.min(...upcomingMatches.map((m: Match) => m.matchday))
-        : 1;
+      let currentMatchday: number;
+      if (leagueCode === 'CL') {
+        // For UCL, start from matchday 4 (current matchday in 25-26 season)
+        const upcomingMatchdays = upcomingMatches.map((m: Match) => m.matchday);
+        const filteredMatchdays = upcomingMatchdays.filter((md: number) => md >= 4);
+        
+        currentMatchday = filteredMatchdays.length > 0 
+          ? Math.min(...filteredMatchdays)
+          : 4;
+        
+        // Handle case where API returns 0 or invalid matchday
+        if (currentMatchday === 0 || currentMatchday < 4) {
+          currentMatchday = 4;
+        }
+      } else {
+        // For other leagues, use the minimum upcoming matchday
+        currentMatchday = upcomingMatches.length > 0
+          ? Math.min(...upcomingMatches.map((m: Match) => m.matchday))
+          : 1;
+      }
 
       const data: FootballApiData = {
         standings,

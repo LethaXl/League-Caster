@@ -116,7 +116,7 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                     <span className={`text-[9px] xs:text-xs sm:text-sm font-medium text-center ${
                       selectedTeams.includes(standing.team.id) ? 'text-[#f7e479]' : 'text-primary'
                     }`}>
-                      {standing.team.shortName || standing.team.name}
+                      {standing.team.shortName || standing.team.name || 'Unknown Team'}
                     </span>
                   </div>
                 ))}
@@ -162,7 +162,7 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
                             className="object-contain"
                           />
                         </div>
-                        <span className="text-xs sm:text-sm max-[750px]:text-[10px] text-primary">{team.team.shortName || team.team.name}</span>
+                        <span className="text-xs sm:text-sm max-[750px]:text-[10px] text-primary">{team.team.shortName || team.team.name || 'Unknown Team'}</span>
                       </div>
                     );
                   })}
