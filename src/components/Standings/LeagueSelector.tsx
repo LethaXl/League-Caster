@@ -8,11 +8,14 @@ interface LeagueSelectorProps {
 
 const leagues: League[] = [
   { code: 'PL', name: 'Premier League', country: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', image: '/premierleague.png' },
-  { code: 'BL1', name: 'Bundesliga', country: 'Germany', flag: '🇩🇪', image: '/bundesliga.png' },
-  { code: 'FL1', name: 'Ligue 1', country: 'France', flag: '🇫🇷', image: '/ligue1.png' },
-  { code: 'SA', name: 'Serie A', country: 'Italy', flag: '🇮🇹', image: '/seriea.png' },
   { code: 'PD', name: 'La Liga', country: 'Spain', flag: '🇪🇸', image: '/laliga.png' },
+  { code: 'FL1', name: 'Ligue 1', country: 'France', flag: '🇫🇷', image: '/ligue1.png' },
+  { code: 'BL1', name: 'Bundesliga', country: 'Germany', flag: '🇩🇪', image: '/bundesliga.png' },
+  { code: 'SA', name: 'Serie A', country: 'Italy', flag: '🇮🇹', image: '/seriea.png' },
 ];
+
+// UCL league data (separate from rotating carousel)
+const uclLeague = { code: 'CL', name: 'Champions League', country: 'Europe', flag: '🇪🇺', image: '/ucl.png' };
 
 export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) {
   const [activeIndex, setActiveIndex] = useState(2);
@@ -51,21 +54,21 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
         RADIUS_X: 110,
         RADIUS_Y: 15,
         Y_OFFSET: -5,
-        LOGO_SIZE: 90,
+        LOGO_SIZE: 90, // Increased back
       };
     } else if (isMobile) {
       return {
         RADIUS_X: 150,
         RADIUS_Y: 20,
         Y_OFFSET: -10,
-        LOGO_SIZE: 120,
+        LOGO_SIZE: 120, // Increased back
       };
     }
     return {
       RADIUS_X: 300,
       RADIUS_Y: 40,
       Y_OFFSET: -20,
-      LOGO_SIZE: 180,
+      LOGO_SIZE: 180, // Increased back
     };
   };
 
@@ -95,9 +98,28 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
     const x = Math.sin(angle) * RADIUS_X;
     const z = Math.cos(angle) * RADIUS_X;
     
+    // Check if this is the center position (front)
+    const isCenter = Math.abs(Math.cos(angle)) > 0.9;
+    
+    // Check if this is the back position (furthest from viewer)
+    const isBack = Math.cos(angle) < -0.7;
+    
+    // Check if this is a side position (left or right) - but not back
+    const isSide = Math.abs(Math.cos(angle)) < 0.5 && !isBack;
+    
     // Modified Y position calculation to ensure symmetrical height for side logos
-    const yOffset = Math.abs(Math.cos(angle)) < 0.5 ? RADIUS_Y : 0;
-    const y = Y_OFFSET - yOffset;
+    const yOffset = isSide ? RADIUS_Y : 0;
+    
+    // Push down ONLY the centered league to make space for UCL above
+    const centerOffset = isCenter ? (isMobile ? 40 : 60) : 0;
+    
+    // Push down the side leagues slightly (but not back leagues)
+    const sideOffset = isSide ? (isMobile ? 20 : 30) : 0;
+    
+    // Push UP the back leagues (furthest away) - higher priority
+    const backOffset = isBack ? (isMobile ? -50 : -70) : 0;
+    
+    const y = Y_OFFSET - yOffset + centerOffset + sideOffset + backOffset;
 
     // Calculate opacity based on z position
     const opacity = Math.max(
@@ -108,7 +130,7 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
     // Calculate scale based on z position with enhanced center scale
     const baseScale = 0.5 + (z + RADIUS_X) / (2 * RADIUS_X) * 0.5;
     // Add 20% more scale for center position
-    const scale = Math.abs(Math.cos(angle)) > 0.9 ? baseScale * 1.2 : baseScale;
+    const scale = isCenter ? baseScale * 1.2 : baseScale;
 
     const zIndex = Math.round(z + RADIUS_X);
 
@@ -187,11 +209,30 @@ export default function LeagueSelector({ onLeagueSelect }: LeagueSelectorProps) 
   return (
     <div className="relative w-full" style={containerStyle}>
       <div 
-        className="relative w-full h-[200px] xs:h-[250px] sm:h-[300px] md:h-[400px] bg-black overflow-hidden"
+        className="relative w-full h-[280px] xs:h-[280px] sm:h-[340px] md:h-[450px] bg-black overflow-visible"
         ref={carouselRef}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {/* UCL Logo - positioned above the centered league within the black background */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-[2%] sm:top-[\5%] z-[60]">
+          <div 
+            className="cursor-pointer hover:scale-110 transition-transform duration-300"
+            onClick={() => onLeagueSelect(uclLeague.code)}
+          >
+             <Image
+               src={uclLeague.image}
+               alt={uclLeague.name}
+               width={100}
+               height={100}
+               className="w-16 h-16 xs:w-20 xs:h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 object-contain"
+               style={{
+                 filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.6))',
+               }}
+               priority
+             />
+          </div>
+        </div>
         {/* Perspective container */}
         <div 
           className="relative w-full h-full"

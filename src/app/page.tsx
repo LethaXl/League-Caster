@@ -31,6 +31,10 @@ const getMaxMatchday = (leagueCode: string): number => {
   if (leagueCode === 'BL1' || leagueCode === 'FL1') {
     return 34;
   }
+  // Champions League has group stage (6 matchdays) + knockout rounds (up to 7 more matchdays)
+  if (leagueCode === 'CL') {
+    return 13; // 6 group stage + 7 knockout rounds (R16, QF, SF, Final)
+  }
   // Premier League, La Liga, Serie A have 20 teams (38 matchdays)
   return 38;
 };
@@ -42,6 +46,7 @@ const LEAGUES = [
   { code: 'FL1', name: 'Ligue 1', country: 'France', flag: '🇫🇷', image: '/ligue1.png' },
   { code: 'SA', name: 'Serie A', country: 'Italy', flag: '🇮🇹', image: '/seriea.png' },
   { code: 'PD', name: 'La Liga', country: 'Spain', flag: '🇪🇸', image: '/laliga.png' },
+  { code: 'CL', name: 'Champions League', country: 'Europe', flag: '🇪🇺', image: '/ucl.png' },
 ];
 
 export default function Home() {
@@ -588,7 +593,7 @@ export default function Home() {
           <LeagueSelector onLeagueSelect={setSelectedLeague} />
         </div>
         <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-8">
-          <div className="text-center mt-10 text-white font-medium text-lg">
+          <div className="text-center mt-6 sm:mt-4 text-white font-medium text-lg">
             Season 2025/2026
             <div className="mt-1 text-xs text-gray-400">Last Updated: {formattedDate}</div>
           </div>
@@ -1121,7 +1126,7 @@ export default function Home() {
             <button
               onClick={() => {
                 // Clear the initialFetchDone flags for all leagues
-                ['PL', 'BL1', 'FL1', 'SA', 'PD'].forEach(league => {
+                ['PL', 'BL1', 'FL1', 'SA', 'PD', 'CL'].forEach(league => {
                   localStorage.removeItem(`${league}_initialFetchDone`);
                 });
                 setSelectedLeague(null);

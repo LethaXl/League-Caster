@@ -24,6 +24,19 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Disable vertical scrolling on mobile devices */
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+    overflow-y: hidden;
+  }
+  
+  html {
+    overflow-x: hidden;
+    overflow-y: hidden;
+  }
+}
+
 /* Dark theme utility classes */
 .bg-card {
   background-color: var(--card-bg);
