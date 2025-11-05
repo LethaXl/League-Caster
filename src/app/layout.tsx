@@ -23,7 +23,19 @@ export const metadata: Metadata = {
     "Ligue 1 predictions",
     "football standings",
     "League calculator",
+    "League table calculator",
+    "League table",
+    "UCL predictions",
+    "UCL forecasting",
+    "UCL league phase predictions",
+    "UCL league phase calculator",
+    "Champions League predictions",
+    "Champions League forecasting",
+    "Champions League league phase predictions",
+    "Champions League league phase calculator",
     "league calculator",
+    "UCL calculator",
+    "UCL table",
     "match forecasting"
   ],
   openGraph: {
@@ -69,13 +81,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <meta name="google-adsense-account" content="ca-pub-6482912478758155" />
-        <Script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6482912478758155"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
         <Script
           id="structured-data"
           type="application/ld+json"
