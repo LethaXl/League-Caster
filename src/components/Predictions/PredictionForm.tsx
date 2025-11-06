@@ -834,9 +834,6 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const processUnfilteredMatches = async (updatedStandings: Standing[]): Promise<Standing[]> => {
     if (!isRaceMode) return updatedStandings;
     
-    // Only process UCL for now
-    if (leagueCode !== 'CL') return updatedStandings;
-    
     try {
       // Get completed matchdays and matches with robust error handling for cross-browser compatibility
       let completedMatchdays: Record<string, number[]> = {};
@@ -860,44 +857,38 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       const completedMatchdaysForLeague = completedMatchdays[leagueCode] || [];
       
-      // For UCL, only process COMPLETED matchdays (not future ones)
+      // For ALL leagues, only process COMPLETED matchdays (not future ones)
       // This prevents processing matches from matchdays that haven't been submitted yet
+      // This is the same logic that works for UCL
       let matchdaysToProcess: number[] = [];
-      if (leagueCode === 'CL') {
-        // Only process matchdays that are actually completed (submitted by user)
-        // Include current matchday as it's being submitted now
-        matchdaysToProcess = [...completedMatchdaysForLeague];
-        
-        // Add current matchday if not already in the list
-        if (!matchdaysToProcess.includes(currentMatchday)) {
-          matchdaysToProcess.push(currentMatchday);
-        }
-        
-        // Sort to process in order
-        matchdaysToProcess.sort((a, b) => a - b);
-        
-        // Filter out any matchdays that are in the future (beyond current)
-        // This prevents processing matchdays that haven't been reached yet
-        matchdaysToProcess = matchdaysToProcess.filter(md => md <= currentMatchday);
-        
-        console.log(`UCL: Will process matchdays ${matchdaysToProcess.join(', ')} (completed: ${completedMatchdaysForLeague.join(', ')}, current: ${currentMatchday})`);
-      } else {
-        if (completedMatchdaysForLeague.length === 0) {
-          completedMatchdaysForLeague.push(currentMatchday);
-        }
-        matchdaysToProcess = completedMatchdaysForLeague.filter(md => md <= currentMatchday);
+      
+      // Only process matchdays that are actually completed (submitted by user)
+      // Include current matchday as it's being submitted now
+      matchdaysToProcess = [...completedMatchdaysForLeague];
+      
+      // Add current matchday if not already in the list
+      if (!matchdaysToProcess.includes(currentMatchday)) {
+        matchdaysToProcess.push(currentMatchday);
       }
+      
+      // Sort to process in order
+      matchdaysToProcess.sort((a, b) => a - b);
+      
+      // Filter out any matchdays that are in the future (beyond current)
+      // This prevents processing matchdays that haven't been reached yet
+      matchdaysToProcess = matchdaysToProcess.filter(md => md <= currentMatchday);
+      
+      console.log(`${leagueCode}: Will process matchdays ${matchdaysToProcess.join(', ')} (completed: ${completedMatchdaysForLeague.join(', ')}, current: ${currentMatchday})`);
       
       // Process unfiltered matches for ALL matchdays
       let resultStandings = [...updatedStandings];
       
-      // Collect ALL filtered match IDs across ALL completed matchdays (not just ones we're processing)
+      // Collect ALL filtered match IDs across ALL matchdays we're processing
       // This ensures we don't miss any matches that were already processed
       const allFilteredMatchIds = new Set<number>();
       
-      // First, collect from ALL completed matchdays (including ones we might not be processing now)
-      const allCompletedMatchdays = [...new Set([...completedMatchdaysForLeague, currentMatchday])].filter(md => md <= currentMatchday);
-      for (const matchday of allCompletedMatchdays) {
+      // Collect from ALL matchdays we're processing
+      for (const matchday of matchdaysToProcess) {
         try {
           const matchdayKey = `${leagueCode}_md${matchday}_all`;
           const storedMatchesStr = localStorage.getItem(matchdayKey);
@@ -926,57 +917,42 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       const completedMatchIds = new Set<number>(completedMatches[leagueCode] || []);
       completedMatchIds.forEach(id => allFilteredMatchIds.add(id));
       
-      console.log(`UCL: Collected ${allFilteredMatchIds.size} filtered/processed match IDs from ${allCompletedMatchdays.length} matchdays`);
+      console.log(`${leagueCode}: Collected ${allFilteredMatchIds.size} filtered/processed match IDs from ${matchdaysToProcess.length} matchdays`);
       
       const newlyProcessedMatches: number[] = [];
       
       // Process each matchday in order
       for (const matchday of matchdaysToProcess) {
         try {
-          // Get all matches for this matchday
-          let allMatches = await getUnfilteredMatches(matchday);
+          // CRITICAL: Always get matches from localStorage first (not API)
+          // API filters out past matches and causes unnecessary API calls
+          // localStorage has all matches for completed matchdays
+          const allMatchesKey = `${leagueCode}_md${matchday}_all`;
+          let allMatches: Match[] = [];
           
-          // If we got no matches, try to reconstruct from any available cache
-          if (!Array.isArray(allMatches) || allMatches.length === 0) {
-            console.warn(`No matches found for matchday ${matchday}, trying to reconstruct from cache`);
-            
-            // Try to get from matchdayCache if available
-            if (matchdayCache.current.has(matchday)) {
-              const cachedFiltered = matchdayCache.current.get(matchday) || [];
-              // Also check localStorage for the _all key
-              const allMatchesKey = `${leagueCode}_md${matchday}_all`;
-              const cachedAll = (() => {
-                try {
-                  const cached = localStorage.getItem(allMatchesKey);
-                  if (cached && cached !== 'null' && cached.trim() !== '') {
-                    return JSON.parse(cached);
-                  }
-                } catch (e) {
-                  // Ignore
-                }
-                return [];
-              })();
-              
-              // Use cached all matches if available, otherwise try to merge with filtered
+          // First, try to get from localStorage (no API call needed)
+          try {
+            const cachedAllStr = localStorage.getItem(allMatchesKey);
+            if (cachedAllStr && cachedAllStr !== 'null' && cachedAllStr.trim() !== '') {
+              const cachedAll = JSON.parse(cachedAllStr);
               if (Array.isArray(cachedAll) && cachedAll.length > 0) {
                 allMatches = cachedAll;
-                console.log(`Reconstructed ${allMatches.length} matches from _all cache for matchday ${matchday}`);
-              } else if (Array.isArray(cachedFiltered) && cachedFiltered.length > 0) {
-                // If we only have filtered matches, we can't get unfiltered ones
-                // But at least log it
-                console.warn(`Only have filtered matches for matchday ${matchday}, cannot process unfiltered matches`);
-                continue;
-              } else {
-                continue;
+                console.log(`${leagueCode} MD${matchday}: Found ${allMatches.length} matches in localStorage`);
               }
-            } else {
-              continue;
             }
+          } catch (e) {
+            console.warn(`${leagueCode} MD${matchday}: Error parsing localStorage:`, e);
+          }
+          
+          // Only use API if localStorage doesn't have matches (shouldn't happen for completed matchdays)
+          if (allMatches.length === 0) {
+            console.warn(`${leagueCode} MD${matchday}: No matches in localStorage, trying getUnfilteredMatches`);
+            allMatches = await getUnfilteredMatches(matchday);
           }
           
           // Validate we have matches
           if (!Array.isArray(allMatches) || allMatches.length === 0) {
-            console.warn(`No valid matches array for matchday ${matchday}`);
+            console.warn(`${leagueCode} MD${matchday}: No matches found - skipping`);
             continue;
           }
           
@@ -1005,11 +981,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           });
           
           if (unfilteredMatches.length === 0) {
-            console.log(`No unfiltered matches to process for matchday ${matchday} (all ${allMatches.length} matches already processed or involve selected teams)`);
+            console.log(`${leagueCode} MD${matchday}: No unfiltered matches to process (all ${allMatches.length} matches already processed or involve selected teams)`);
             continue;
           }
           
-          console.log(`Processing ${unfilteredMatches.length} unfiltered matches for matchday ${matchday} (out of ${allMatches.length} total) using mode: ${unfilteredMatchesMode}`);
+          console.log(`${leagueCode} MD${matchday}: Processing ${unfilteredMatches.length} unfiltered matches (out of ${allMatches.length} total) using mode: ${unfilteredMatchesMode}`);
           
           // Process each unfiltered match with automatic result assignment
           for (const match of unfilteredMatches) {
@@ -1018,7 +994,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             const awayTeam = resultStandings.find(s => s.team.id === match.awayTeam?.id);
             
             if (!homeTeam || !awayTeam) {
-              console.warn(`Skipping match ${match.id}: team not found in standings`);
+              console.warn(`${leagueCode} MD${matchday}: Skipping match ${match.id} - team not found (home: ${match.homeTeam?.id}, away: ${match.awayTeam?.id})`);
               continue;
             }
             
@@ -1026,7 +1002,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             let resultType: PredictionType = 'draw'; // Default to draw
             
             if (unfilteredMatchesMode === 'auto') {
-              // Auto-assign based on team positions
+              // Auto-assign: ≤ 2-place gap → draw; larger gap → higher-placed wins
               resultType = determineAutomaticResult(homeTeam.position, awayTeam.position);
             }
             // For 'draws' mode, we already set it to 'draw' by default
