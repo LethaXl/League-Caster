@@ -735,6 +735,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
 
   // Function to get all matches for a matchday (filtered + unfiltered)
   const getUnfilteredMatches = async (matchday: number): Promise<Match[]> => {
+    // Guard for SSR/production - localStorage only available on client
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    
     try {
       const cacheKey = `${leagueCode}_md${matchday}_all`;
       
@@ -742,9 +747,11 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       // For current/future matchdays, try API first, then fallback to cache
       const completedMatchdaysData = (() => {
         try {
-          const data = localStorage.getItem('completedMatchdays');
-          if (data && data !== 'null' && data.trim() !== '') {
-            return JSON.parse(data);
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const data = localStorage.getItem('completedMatchdays');
+            if (data && data !== 'null' && data.trim() !== '') {
+              return JSON.parse(data);
+            }
           }
         } catch (e) {
           // Ignore parse errors
@@ -755,7 +762,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       const isCompletedMatchday = completedMatchdaysData[leagueCode]?.includes(matchday);
       
       // Try cache first (especially important for completed matchdays)
-      const cachedMatchesStr = localStorage.getItem(cacheKey);
+      const cachedMatchesStr = typeof window !== 'undefined' && window.localStorage ? localStorage.getItem(cacheKey) : null;
       if (cachedMatchesStr && cachedMatchesStr !== 'null' && cachedMatchesStr.trim() !== '') {
         try {
           const cachedMatches = JSON.parse(cachedMatchesStr);
@@ -800,7 +807,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       }
       
       // Cache for future use with error handling
-      if (response.length > 0) {
+      if (response.length > 0 && typeof window !== 'undefined' && window.localStorage) {
         try {
           const matchesWithMatchday = response.map(m => ({
             ...m,
@@ -817,14 +824,16 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     } catch (error) {
       console.error('Error fetching unfiltered matches:', error);
       // Try to return cached data as fallback
-      try {
-        const cacheKey = `${leagueCode}_md${matchday}_all`;
-        const cachedMatchesStr = localStorage.getItem(cacheKey);
-        if (cachedMatchesStr && cachedMatchesStr !== 'null' && cachedMatchesStr.trim() !== '') {
-          return JSON.parse(cachedMatchesStr);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          const cacheKey = `${leagueCode}_md${matchday}_all`;
+          const cachedMatchesStr = localStorage.getItem(cacheKey);
+          if (cachedMatchesStr && cachedMatchesStr !== 'null' && cachedMatchesStr.trim() !== '') {
+            return JSON.parse(cachedMatchesStr);
+          }
+        } catch (e) {
+          // Ignore
         }
-      } catch (e) {
-        // Ignore
       }
       return [];
     }
@@ -834,21 +843,29 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const processUnfilteredMatches = async (updatedStandings: Standing[]): Promise<Standing[]> => {
     if (!isRaceMode) return updatedStandings;
     
+    // Guard for SSR/production - localStorage only available on client
+    if (typeof window === 'undefined' || !window.localStorage) {
+      console.warn('localStorage not available (SSR), skipping unfiltered matches processing');
+      return updatedStandings;
+    }
+    
     try {
       // Get completed matchdays and matches with robust error handling for cross-browser compatibility
       let completedMatchdays: Record<string, number[]> = {};
       let completedMatches: Record<string, number[]> = {};
       
       try {
-        const matchdaysStr = localStorage.getItem('completedMatchdays');
-        const matchesStr = localStorage.getItem('completedMatches');
-        
-        // Handle browser differences in localStorage (Edge may return null differently)
-        if (matchdaysStr && matchdaysStr !== 'null' && matchdaysStr.trim() !== '') {
-          completedMatchdays = JSON.parse(matchdaysStr);
-        }
-        if (matchesStr && matchesStr !== 'null' && matchesStr.trim() !== '') {
-          completedMatches = JSON.parse(matchesStr);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const matchdaysStr = localStorage.getItem('completedMatchdays');
+          const matchesStr = localStorage.getItem('completedMatches');
+          
+          // Handle browser differences in localStorage (Edge may return null differently)
+          if (matchdaysStr && matchdaysStr !== 'null' && matchdaysStr.trim() !== '') {
+            completedMatchdays = JSON.parse(matchdaysStr);
+          }
+          if (matchesStr && matchesStr !== 'null' && matchesStr.trim() !== '') {
+            completedMatches = JSON.parse(matchesStr);
+          }
         }
       } catch (parseError) {
         console.warn('Error parsing localStorage data:', parseError);
@@ -891,7 +908,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       for (const matchday of matchdaysToProcess) {
         try {
           const matchdayKey = `${leagueCode}_md${matchday}_all`;
-          const storedMatchesStr = localStorage.getItem(matchdayKey);
+          const storedMatchesStr = typeof window !== 'undefined' && window.localStorage ? localStorage.getItem(matchdayKey) : null;
           if (storedMatchesStr && storedMatchesStr !== 'null' && storedMatchesStr.trim() !== '') {
             try {
               const storedMatches = JSON.parse(storedMatchesStr);
@@ -932,7 +949,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           
           // First, try to get from localStorage (no API call needed)
           try {
-            const cachedAllStr = localStorage.getItem(allMatchesKey);
+            const cachedAllStr = typeof window !== 'undefined' && window.localStorage ? localStorage.getItem(allMatchesKey) : null;
             if (cachedAllStr && cachedAllStr !== 'null' && cachedAllStr.trim() !== '') {
               const cachedAll = JSON.parse(cachedAllStr);
               if (Array.isArray(cachedAll) && cachedAll.length > 0) {
@@ -1044,7 +1061,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           newlyProcessedMatches.forEach(id => existingSet.add(id));
           completedMatches[leagueCode] = Array.from(existingSet);
           
-          localStorage.setItem('completedMatches', JSON.stringify(completedMatches));
+          if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.setItem('completedMatches', JSON.stringify(completedMatches));
+          }
         } catch (storageError) {
           console.error('Error saving completed matches to localStorage:', storageError);
         }
@@ -1076,20 +1095,23 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     let completedMatchdays: Record<string, number[]> = {};
     let completedMatches: Record<string, number[]> = {};
     
-    try {
-      const matchdaysStr = localStorage.getItem('completedMatchdays');
-      const matchesStr = localStorage.getItem('completedMatches');
-      
-      // Handle browser differences in localStorage (Edge may return null differently)
-      if (matchdaysStr && matchdaysStr !== 'null' && matchdaysStr.trim() !== '') {
-        completedMatchdays = JSON.parse(matchdaysStr);
+    // Guard for SSR/production
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const matchdaysStr = localStorage.getItem('completedMatchdays');
+        const matchesStr = localStorage.getItem('completedMatches');
+        
+        // Handle browser differences in localStorage (Edge may return null differently)
+        if (matchdaysStr && matchdaysStr !== 'null' && matchdaysStr.trim() !== '') {
+          completedMatchdays = JSON.parse(matchdaysStr);
+        }
+        if (matchesStr && matchesStr !== 'null' && matchesStr.trim() !== '') {
+          completedMatches = JSON.parse(matchesStr);
+        }
+      } catch (parseError) {
+        console.warn('Error parsing localStorage data in handleSubmit:', parseError);
+        // Continue with empty objects if parsing fails
       }
-      if (matchesStr && matchesStr !== 'null' && matchesStr.trim() !== '') {
-        completedMatches = JSON.parse(matchesStr);
-      }
-    } catch (parseError) {
-      console.warn('Error parsing localStorage data in handleSubmit:', parseError);
-      // Continue with empty objects if parsing fails
     }
     
     if (!completedMatches[leagueCode]) {
@@ -1107,56 +1129,58 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
       
       // Store each match in localStorage for later retrieval
       // IMPORTANT: We merge with existing matches, not overwrite, to preserve unfiltered matches
-      try {
-        // Get existing matches for this matchday
-        const matchdayKey = `${leagueCode}_md${currentMatchday}_all`;
-        const storedMatchesStr = localStorage.getItem(matchdayKey);
-        let storedMatches: Match[] = [];
-        
-        // Handle browser differences in localStorage parsing
-        if (storedMatchesStr && storedMatchesStr !== 'null' && storedMatchesStr.trim() !== '') {
-          try {
-            storedMatches = JSON.parse(storedMatchesStr);
-          } catch (parseErr) {
-            console.warn(`Error parsing stored matches for ${matchdayKey}:`, parseErr);
-            storedMatches = [];
-          }
-        }
-        
-        // Check if this match is already stored
-        const matchIndex = storedMatches.findIndex((m: Match) => m.id === match.id);
-        
-        if (matchIndex >= 0) {
-          // Update the existing match
-          storedMatches[matchIndex] = {
-            ...storedMatches[matchIndex],
-            ...match,
-            matchday: currentMatchday
-          };
-        } else {
-          // Add the new match with matchday information
-          storedMatches.push({
-            ...match,
-            matchday: currentMatchday
-          });
-        }
-        
-        // Save back to localStorage with error handling
-        // NOTE: We're MERGING, not overwriting, to preserve all matches
+      if (typeof window !== 'undefined' && window.localStorage) {
         try {
-          localStorage.setItem(matchdayKey, JSON.stringify(storedMatches));
-        } catch (storageErr) {
-          console.error(`Error saving to localStorage for ${matchdayKey}:`, storageErr);
+          // Get existing matches for this matchday
+          const matchdayKey = `${leagueCode}_md${currentMatchday}_all`;
+          const storedMatchesStr = localStorage.getItem(matchdayKey);
+          let storedMatches: Match[] = [];
+          
+          // Handle browser differences in localStorage parsing
+          if (storedMatchesStr && storedMatchesStr !== 'null' && storedMatchesStr.trim() !== '') {
+            try {
+              storedMatches = JSON.parse(storedMatchesStr);
+            } catch (parseErr) {
+              console.warn(`Error parsing stored matches for ${matchdayKey}:`, parseErr);
+              storedMatches = [];
+            }
+          }
+          
+          // Check if this match is already stored
+          const matchIndex = storedMatches.findIndex((m: Match) => m.id === match.id);
+          
+          if (matchIndex >= 0) {
+            // Update the existing match
+            storedMatches[matchIndex] = {
+              ...storedMatches[matchIndex],
+              ...match,
+              matchday: currentMatchday
+            };
+          } else {
+            // Add the new match with matchday information
+            storedMatches.push({
+              ...match,
+              matchday: currentMatchday
+            });
+          }
+          
+          // Save back to localStorage with error handling
+          // NOTE: We're MERGING, not overwriting, to preserve all matches
+          try {
+            localStorage.setItem(matchdayKey, JSON.stringify(storedMatches));
+          } catch (storageErr) {
+            console.error(`Error saving to localStorage for ${matchdayKey}:`, storageErr);
+          }
+        } catch (e) {
+          console.error("Error storing match data in localStorage", e);
         }
-      } catch (e) {
-        console.error("Error storing match data in localStorage", e);
       }
     });
     
     // CRITICAL: Before processing unfiltered matches, ensure ALL matches for this matchday are stored
     // This prevents issues where cache only has filtered matches
     // ESPECIALLY IMPORTANT FOR UCL in Edge browser
-    if (isRaceMode && leagueCode === 'CL') {
+    if (isRaceMode && leagueCode === 'CL' && typeof window !== 'undefined' && window.localStorage) {
       try {
         const matchdayKey = `${leagueCode}_md${currentMatchday}_all`;
         const existingCache = localStorage.getItem(matchdayKey);
