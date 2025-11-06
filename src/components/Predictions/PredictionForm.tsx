@@ -743,54 +743,26 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     try {
       const cacheKey = `${leagueCode}_md${matchday}_all`;
       
-      // For completed/past matchdays, we must use localStorage (API filters out past matches)
-      // For current/future matchdays, try API first, then fallback to cache
-      const completedMatchdaysData = (() => {
-        try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            const data = localStorage.getItem('completedMatchdays');
-            if (data && data !== 'null' && data.trim() !== '') {
-              return JSON.parse(data);
-            }
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-        return {};
-      })();
-      
-      const isCompletedMatchday = completedMatchdaysData[leagueCode]?.includes(matchday);
-      
-      // Try cache first (especially important for completed matchdays)
+      // ALWAYS try cache first (no API call if cache exists)
+      // This prevents duplicate API calls - cache is always valid if it exists
       const cachedMatchesStr = typeof window !== 'undefined' && window.localStorage ? localStorage.getItem(cacheKey) : null;
       if (cachedMatchesStr && cachedMatchesStr !== 'null' && cachedMatchesStr.trim() !== '') {
         try {
           const cachedMatches = JSON.parse(cachedMatchesStr);
           if (Array.isArray(cachedMatches) && cachedMatches.length > 0) {
-            // For completed matchdays, trust the cache
-            if (isCompletedMatchday) {
-              console.log(`Using cached matches for completed matchday ${matchday} (${cachedMatches.length} matches)`);
-              return cachedMatches;
-            }
-            // For current matchday, verify cache has unfiltered matches
-            const hasUnfilteredMatches = cachedMatches.some((m: Match) => {
-              const isHomeSelected = selectedTeamIds.includes(m.homeTeam?.id);
-              const isAwaySelected = selectedTeamIds.includes(m.awayTeam?.id);
-              return !isHomeSelected && !isAwaySelected;
-            });
-            
-            if (hasUnfilteredMatches || cachedMatches.length >= 10) {
-              console.log(`Using cached matches for matchday ${matchday} (${cachedMatches.length} matches)`);
-              return cachedMatches;
-            }
+            // Always use cache if it exists and has matches
+            // The cache validation is done in handleSubmit before calling this function
+            console.log(`${leagueCode} MD${matchday}: Using cached matches (${cachedMatches.length} matches)`);
+            return cachedMatches;
           }
         } catch (parseError) {
           console.warn(`Error parsing cached matches for ${cacheKey}:`, parseError);
         }
       }
       
-      // If cache doesn't work or is incomplete, fetch from API
-      console.log(`Fetching all matches for matchday ${matchday} from API`);
+      // Only fetch from API if cache doesn't exist or is empty
+      // This should rarely happen since handleSubmit ensures cache is populated
+      console.log(`${leagueCode} MD${matchday}: No cache found, fetching from API`);
       const response = await getMatches(leagueCode, matchday);
       
       if (!Array.isArray(response)) {
@@ -1179,12 +1151,16 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     
     // CRITICAL: Before processing unfiltered matches, ensure ALL matches for this matchday are stored
     // This prevents issues where cache only has filtered matches
-    // ESPECIALLY IMPORTANT FOR UCL in Edge browser
-    if (isRaceMode && leagueCode === 'CL' && typeof window !== 'undefined' && window.localStorage) {
+    // This logic works for ALL leagues (UCL, PL, BL1, SA, FL1, PD)
+    if (isRaceMode && typeof window !== 'undefined' && window.localStorage) {
       try {
         const matchdayKey = `${leagueCode}_md${currentMatchday}_all`;
         const existingCache = localStorage.getItem(matchdayKey);
         let needsFullFetch = false;
+        
+        // Determine expected matches per matchday based on league
+        // UCL has 8 matches per matchday, other leagues typically have 10 matches per matchday
+        const expectedMatchesPerMatchday = leagueCode === 'CL' ? 8 : 10;
         
         if (!existingCache || existingCache === 'null' || existingCache.trim() === '[]') {
           needsFullFetch = true;
@@ -1200,11 +1176,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
                 return !isHomeSelected && !isAwaySelected;
               });
               
-              // For UCL, each matchday typically has 8 matches (16 teams playing)
-              // If we have fewer than 8 matches or no unfiltered matches, likely incomplete
-              if (!hasUnfilteredMatches && cachedMatches.length < 8) {
+              // If we have fewer than expected matches or no unfiltered matches, likely incomplete
+              if (!hasUnfilteredMatches && cachedMatches.length < expectedMatchesPerMatchday) {
                 needsFullFetch = true;
-                console.log(`UCL matchday ${currentMatchday} cache incomplete: ${cachedMatches.length} matches, no unfiltered`);
+                console.log(`${leagueCode} matchday ${currentMatchday} cache incomplete: ${cachedMatches.length} matches, no unfiltered (expected: ${expectedMatchesPerMatchday})`);
               }
             }
           } catch (parseErr) {
@@ -1213,7 +1188,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
         }
         
         if (needsFullFetch) {
-          console.log(`UCL: Ensuring complete match cache for matchday ${currentMatchday}`);
+          console.log(`${leagueCode}: Ensuring complete match cache for matchday ${currentMatchday}`);
           // Fetch all matches for this matchday to ensure complete cache
           const allMatchesForMatchday = await getMatches(leagueCode, currentMatchday);
           
@@ -1240,7 +1215,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             
             try {
               localStorage.setItem(matchdayKey, JSON.stringify(mergedMatches));
-              console.log(`UCL: Cached ${mergedMatches.length} total matches for matchday ${currentMatchday} (${newMatches.length} new)`);
+              console.log(`${leagueCode}: Cached ${mergedMatches.length} total matches for matchday ${currentMatchday} (${newMatches.length} new)`);
             } catch (cacheErr) {
               console.error(`Error caching all matches for matchday ${currentMatchday}:`, cacheErr);
             }
