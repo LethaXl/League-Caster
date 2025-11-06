@@ -734,11 +734,11 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     
     // If UCL has specific styling, use it; otherwise use default styling
     if (leagueCode === 'CL') {
-      return `${highlightRow ? 'bg-[#FFD700]/10 border-l-4 border-[#FFD700]' : `${uclBackgroundClass} ${uclBorderClass}`} 
+      return `${highlightRow ? `bg-[#FFD700]/10 ${uclBorderClass}` : `${uclBackgroundClass} ${uclBorderClass}`} 
               hover:bg-black/10 transition-all duration-300 ease-in-out`;
     }
     
-    return `${highlightRow ? 'bg-[#FFD700]/10 border-l-4 border-[#FFD700]' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
+    return `${highlightRow ? 'bg-[#FFD700]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
             hover:bg-black/10 transition-all duration-300 ease-in-out`;
   };
 
