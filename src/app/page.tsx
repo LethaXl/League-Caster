@@ -1557,21 +1557,29 @@ export default function Home() {
               standings={(() => {
                 if (loadingHistorical) return standings;
                 
-                // In forecast mode with selected matchday, show predicted standings for that matchday
+                // In forecast mode with selected historical matchday, ALWAYS show historical standings (actual fixtures)
+                // Only show predicted standings if it's a future/predicted matchday (greater than current matchday)
                 if (viewingFromMatchday !== null && selectedHistoricalMatchday !== null) {
-                  const savedStandings = predictedStandingsByMatchday.get(selectedHistoricalMatchday);
-                  if (savedStandings && savedStandings.length > 0) {
-                    // Fix playedGames to match the selected matchday
-                    return savedStandings.map(s => ({
-                      ...s,
-                      playedGames: selectedHistoricalMatchday,
-                      team: { ...s.team }
-                    }));
+                  // If selected matchday is in the past (before current matchday), show historical standings
+                  if (selectedHistoricalMatchday < currentMatchday) {
+                    if (historicalStandings.length > 0) {
+                      return historicalStandings;
+                    }
+                  } else {
+                    // For predicted matchdays, show predicted standings
+                    const savedStandings = predictedStandingsByMatchday.get(selectedHistoricalMatchday);
+                    if (savedStandings && savedStandings.length > 0) {
+                      return savedStandings.map(s => ({
+                        ...s,
+                        playedGames: selectedHistoricalMatchday,
+                        team: { ...s.team }
+                      }));
+                    }
                   }
                 }
                 
-                // Regular historical standings
-                if (selectedHistoricalMatchday && historicalStandings.length > 0) {
+                // Regular historical standings (regular mode)
+                if (selectedHistoricalMatchday && historicalStandings.length > 0 && viewingFromMatchday === null) {
                   return historicalStandings;
                 }
                 
