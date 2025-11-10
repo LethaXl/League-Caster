@@ -435,4 +435,163 @@ export const getLeagueData = async (leagueCode: string): Promise<{ standings: St
   });
 };
 
+// Function to get all matches (including completed) for a specific matchday
+export const getAllMatchesForMatchday = async (leagueCode: string, matchday: number): Promise<Match[]> => {
+  return queueRequest(async () => {
+    const response = await api.get('', {
+      params: {
+        endpoint: `/competitions/${leagueCode}/matches`,
+        matchday,
+        all: 'true', // Request all matches including completed ones
+        leagueCode
+      }
+    });
+    
+    // Return all matches (both completed and scheduled) for the matchday
+    return response.data.matches.map((match: Match) => {
+      // Apply team name mappings
+      return {
+        ...match,
+        homeTeam: {
+          ...match.homeTeam,
+          name: TEAM_NAME_MAPPING[match.homeTeam.name] || match.homeTeam.name
+        },
+        awayTeam: {
+          ...match.awayTeam,
+          name: TEAM_NAME_MAPPING[match.awayTeam.name] || match.awayTeam.name
+        }
+      };
+    });
+  });
+};
+
+// Function to get all completed matches up to a specific matchday
+export const getCompletedMatchesUpToMatchday = async (leagueCode: string, upToMatchday: number): Promise<Match[]> => {
+  return queueRequest(async () => {
+    try {
+      // Fetch all matches for the league at once (more efficient than per matchday)
+      const response = await api.get('', {
+        params: {
+          endpoint: `/competitions/${leagueCode}/matches`,
+          allMatches: 'true', // Request all matches at once
+          leagueCode
+        }
+      });
+      
+      // Filter for completed matches up to the target matchday
+      const allMatches = response.data.matches
+        .filter((m: Match) => 
+          m.status === 'FINISHED' && 
+          m.matchday !== undefined && 
+          m.matchday <= upToMatchday
+        )
+        .map((match: Match) => {
+          // Apply team name mappings
+          return {
+            ...match,
+            homeTeam: {
+              ...match.homeTeam,
+              name: TEAM_NAME_MAPPING[match.homeTeam.name] || match.homeTeam.name
+            },
+            awayTeam: {
+              ...match.awayTeam,
+              name: TEAM_NAME_MAPPING[match.awayTeam.name] || match.awayTeam.name
+            }
+          };
+        });
+      
+      return allMatches;
+    } catch (error) {
+      console.error('Error fetching completed matches:', error);
+      throw error;
+    }
+  });
+};
+
+// Function to calculate historical standings from completed matches
+export const calculateHistoricalStandings = (
+  initialStandings: Standing[],
+  completedMatches: Match[]
+): Standing[] => {
+  // Create a deep copy of initial standings
+  const historicalStandings = initialStandings.map(standing => ({
+    ...standing,
+    team: { ...standing.team },
+    position: 0,
+    playedGames: 0,
+    points: 0,
+    won: 0,
+    draw: 0,
+    lost: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    goalDifference: 0
+  }));
+  
+  // Process each completed match
+  completedMatches.forEach(match => {
+    if (match.status !== 'FINISHED' || !match.score?.fullTime) return;
+    
+    const homeScore = match.score.fullTime.home ?? 0;
+    const awayScore = match.score.fullTime.away ?? 0;
+    
+    // Find teams in standings
+    const homeTeam = historicalStandings.find(s => s.team.id === match.homeTeam.id);
+    const awayTeam = historicalStandings.find(s => s.team.id === match.awayTeam.id);
+    
+    if (!homeTeam || !awayTeam) return;
+    
+    // Update home team stats
+    homeTeam.playedGames += 1;
+    homeTeam.goalsFor += homeScore;
+    homeTeam.goalsAgainst += awayScore;
+    homeTeam.goalDifference = homeTeam.goalsFor - homeTeam.goalsAgainst;
+    
+    // Update away team stats
+    awayTeam.playedGames += 1;
+    awayTeam.goalsFor += awayScore;
+    awayTeam.goalsAgainst += homeScore;
+    awayTeam.goalDifference = awayTeam.goalsFor - awayTeam.goalsAgainst;
+    
+    // Determine result and update points
+    if (homeScore > awayScore) {
+      homeTeam.won += 1;
+      homeTeam.points += 3;
+      awayTeam.lost += 1;
+    } else if (awayScore > homeScore) {
+      awayTeam.won += 1;
+      awayTeam.points += 3;
+      homeTeam.lost += 1;
+    } else {
+      homeTeam.draw += 1;
+      homeTeam.points += 1;
+      awayTeam.draw += 1;
+      awayTeam.points += 1;
+    }
+  });
+  
+  // Sort by points, goal difference, and wins
+  historicalStandings.sort((a, b) => {
+    // First sort by points (descending)
+    if (b.points !== a.points) {
+      return b.points - a.points;
+    }
+    
+    // If points are equal, sort by goal difference (descending)
+    if (b.goalDifference !== a.goalDifference) {
+      return b.goalDifference - a.goalDifference;
+    }
+    
+    // If goal difference is also equal, sort by wins (descending)
+    return b.won - a.won;
+  });
+  
+  // Update positions after sorting
+  historicalStandings.forEach((standing, index) => {
+    standing.position = index + 1;
+  });
+  
+  return historicalStandings;
+};
+
 export default api; 

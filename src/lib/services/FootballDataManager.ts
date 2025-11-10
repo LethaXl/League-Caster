@@ -127,6 +127,34 @@ export class FootballDataManager {
     return data.matches;
   }
 
+  async getAllMatchesForMatchday(leagueCode: string, matchday: number): Promise<Match[]> {
+    try {
+      const response = await this.apiClient.get(`/competitions/${leagueCode}/matches`, {
+        params: { matchday }
+      });
+      
+      // Return all matches (both completed and scheduled) for the matchday
+      return response.data.matches.map((match: Match) => match);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Error fetching matches for ${leagueCode} matchday ${matchday}:`, errorMessage);
+      throw error;
+    }
+  }
+
+  async getAllMatches(leagueCode: string): Promise<Match[]> {
+    try {
+      const response = await this.apiClient.get(`/competitions/${leagueCode}/matches`);
+      
+      // Return all matches (both completed and scheduled)
+      return response.data.matches.map((match: Match) => match);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Error fetching all matches for ${leagueCode}:`, errorMessage);
+      throw error;
+    }
+  }
+
   async getStandings(leagueCode: string): Promise<Standing[]> {
     const data = await this.getLeagueData(leagueCode);
     return data.standings;

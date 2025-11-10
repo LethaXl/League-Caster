@@ -42,11 +42,32 @@ export async function GET(request: Request) {
       
       if (endpoint.includes('/matches')) {
         const matchdayNum = matchday ? parseInt(matchday) : undefined;
-        const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
-        return NextResponse.json({ 
-          matches,
-          source: 'upstash_redis_cache'
-        });
+        // Check if we need all matches (including completed) - indicated by 'all' query param
+        const getAllMatches = searchParams.get('all') === 'true';
+        const getAllMatchesForLeague = searchParams.get('allMatches') === 'true';
+        
+        if (getAllMatchesForLeague) {
+          // Fetch all matches for the league at once (more efficient)
+          const matches = await footballDataManager.getAllMatches(leagueCode);
+          return NextResponse.json({ 
+            matches,
+            source: 'api'
+          });
+        } else if (getAllMatches && matchdayNum) {
+          // Fetch all matches (including completed) for the matchday
+          const matches = await footballDataManager.getAllMatchesForMatchday(leagueCode, matchdayNum);
+          return NextResponse.json({ 
+            matches,
+            source: 'api'
+          });
+        } else {
+          // Use the regular method (upcoming matches only)
+          const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
+          return NextResponse.json({ 
+            matches,
+            source: 'upstash_redis_cache'
+          });
+        }
       }
     }
 

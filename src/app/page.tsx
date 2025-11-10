@@ -6,7 +6,7 @@ import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
 import ModeSelection from '@/components/Predictions/ModeSelection';
 import PredictionSummary from '@/components/Predictions/PredictionSummary';
-import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData } from '@/services/football-api';
+import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings } from '@/services/football-api';
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
 import { Prediction } from '@/types/predictions';
@@ -61,6 +61,10 @@ export default function Home() {
   const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
   const [matchPredictions, setMatchPredictions] = useState<Map<number, Prediction>>(new Map());
   const [seasonOver, setSeasonOver] = useState(false); // Season is active
+  const [selectedHistoricalMatchday, setSelectedHistoricalMatchday] = useState<number | null>(null);
+  const [historicalStandings, setHistoricalStandings] = useState<Standing[]>([]);
+  const [loadingHistorical, setLoadingHistorical] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   // Cache for API data to reduce calls
   const matchdayCache = useRef<Map<string, number>>(new Map());
@@ -124,6 +128,42 @@ export default function Home() {
 
   // Determine the max matchday for the currently selected league
   const maxMatchday = selectedLeague ? getMaxMatchday(selectedLeague) : 38;
+
+  // Handle historical matchday selection
+  const handleHistoricalMatchdayChange = async (matchday: number | null) => {
+    if (!selectedLeague || !standings.length) return;
+    
+    setSelectedHistoricalMatchday(matchday);
+    
+    if (matchday === null) {
+      setHistoricalStandings([]);
+      return;
+    }
+    
+    setLoadingHistorical(true);
+    
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      setError('Request timed out. Please try again.');
+      setLoadingHistorical(false);
+    }, 15000); // 15 seconds timeout
+    
+    try {
+      // Get all completed matches up to the selected matchday
+      const completedMatches = await getCompletedMatchesUpToMatchday(selectedLeague, matchday);
+      
+      // Calculate historical standings from completed matches
+      const calculatedStandings = calculateHistoricalStandings(standings, completedMatches);
+      setHistoricalStandings(calculatedStandings);
+      clearTimeout(timeoutId);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      console.error('Error fetching historical standings:', error);
+      setError('Failed to load historical standings. Please try again.');
+    } finally {
+      setLoadingHistorical(false);
+    }
+  };
   
   // Check if we're at the final matchday for the current league
   // const isFinalMatchday = currentMatchday >= maxMatchday;
@@ -263,8 +303,31 @@ export default function Home() {
   useEffect(() => {
     if (!selectedLeague) return;
     
+    // Reset historical matchday when league changes
+    setSelectedHistoricalMatchday(null);
+    setHistoricalStandings([]);
+    setIsDropdownOpen(false);
+    
     fetchData();
   }, [selectedLeague, fetchData]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (isDropdownOpen && !target.closest('.historical-dropdown-container')) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
 
   const handleStartPredictions = async () => {
     if (!selectedLeague) return;
@@ -1134,6 +1197,8 @@ export default function Home() {
                 setShowModeSelection(false);
                 setIsViewingStandings(false);
                 setViewingFromMatchday(null);
+                setSelectedHistoricalMatchday(null);
+                setHistoricalStandings([]);
                 // Reset race mode when returning to league selection
                 resetPredictions();
               }}
@@ -1148,31 +1213,79 @@ export default function Home() {
           <div className="bg-card rounded-lg p-2 sm:p-6 my-6 sm:my-10 ml-1 mr-1 sm:ml-0">
             <div className="mb-6">
               <div className="flex flex-row justify-between items-center mb-2 sm:mb-4 gap-2 sm:gap-4">
-                <h2
-                  className={
-                    `text-base sm:text-xl font-semibold sm:font-bold text-primary ` +
-                    ((isViewingStandings || viewingFromMatchday) && (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) ? 'text-center w-full mx-auto my-0' : 'mb-2 sm:mb-0')
-                  }
-                >
-                  {isViewingStandings || viewingFromMatchday 
-                    ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
-                      ? 'Final Table' 
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <h2
+                    className={
+                      `text-base sm:text-xl font-semibold sm:font-bold text-primary flex items-center gap-2 sm:gap-3 ` +
+                      ((isViewingStandings || viewingFromMatchday) && (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) ? 'text-center w-full mx-auto my-0' : 'mb-2 sm:mb-0')
+                    }
+                  >
+                    {isViewingStandings || viewingFromMatchday 
+                      ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
+                        ? 'Final Table' 
+                        : (
+                            <span className="flex flex-col">
+                              <span>Standings after</span>
+                              <span>Matchday {viewingFromMatchday || (currentMatchday > 1 ? currentMatchday - 1 : 1)}</span>
+                            </span>
+                          )
                       : (
-                          <span className="flex flex-col">
-                            <span>Standings after</span>
-                            <span>Matchday {viewingFromMatchday || (currentMatchday > 1 ? currentMatchday - 1 : 1)}</span>
-                          </span>
-                        )
-                    : (
-                        <>
-                          <span className="flex flex-col items-center ml-4 sm:ml-0 sm:hidden text-base font-semibold mt-2">
-                            <span className="text-center">Current</span>
-                            <span className="text-center">Standings</span>
-                          </span>
-                          <span className="hidden sm:inline">Current Standings</span>
-                        </>
-                      )}
-                </h2>
+                          <>
+                            {/* Integrated dropdown styled like Start Forecasting button */}
+                            {!isViewingStandings && !viewingFromMatchday && currentMatchday > 1 && (
+                                <div className="relative inline-block group historical-dropdown-container">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    disabled={loadingHistorical || loading}
+                                    className="appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 py-1 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8"
+                                  >
+                                    {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : 'Current Standings'}
+                                  </button>
+                                  {isDropdownOpen && (
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px]" style={{ border: '2px solid #f7e479' }}>
+                                      {selectedHistoricalMatchday !== null && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleHistoricalMatchdayChange(null);
+                                          }}
+                                          className="w-full text-center px-3 py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap text-primary hover:bg-[#f7e479] group/item"
+                                          onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
+                                          onMouseLeave={(e) => e.currentTarget.style.color = ''}
+                                        >
+                                          Current Standings
+                                        </button>
+                                      )}
+                                      {Array.from({ length: currentMatchday - 1 }, (_, i) => i + 1)
+                                        .filter((md) => md !== selectedHistoricalMatchday)
+                                        .map((md) => (
+                                        <button
+                                          key={md}
+                                          type="button"
+                                          onClick={() => {
+                                            handleHistoricalMatchdayChange(md);
+                                          }}
+                                          className="w-full text-center px-3 py-2 text-xs sm:text-sm font-semibold transition-colors text-primary hover:bg-[#f7e479]"
+                                          onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
+                                          onMouseLeave={(e) => e.currentTarget.style.color = ''}
+                                        >
+                                          Matchday {md}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3">
+                                    <svg className={`h-3 w-3 sm:h-4 sm:w-4 transition-colors duration-300 ${isDropdownOpen ? 'text-black' : 'text-[#f7e479]'} group-hover:text-black`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                  </h2>
+                </div>
                 <div className="flex space-x-4">
                   {/* Show Prediction Summary button for race mode at final matchday */}
                   {isRaceMode && isViewingStandings && 
@@ -1233,9 +1346,19 @@ export default function Home() {
             </div>
             
             <StandingsTable 
-              standings={isViewingStandings && !viewingFromMatchday ? predictedStandings : viewingFromMatchday ? predictedStandings : standings} 
+              standings={
+                loadingHistorical 
+                  ? standings 
+                  : selectedHistoricalMatchday && historicalStandings.length > 0
+                    ? historicalStandings
+                    : isViewingStandings && !viewingFromMatchday 
+                      ? predictedStandings 
+                      : viewingFromMatchday 
+                        ? predictedStandings 
+                        : standings
+              } 
               initialStandings={isViewingStandings || viewingFromMatchday ? standings : undefined}
-              loading={false} 
+              loading={loadingHistorical} 
               leagueCode={selectedLeague || undefined}
               selectedTeamIds={isRaceMode ? selectedTeamIds : undefined}
             />
