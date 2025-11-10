@@ -66,6 +66,7 @@ export default function Home() {
   const [loadingHistorical, setLoadingHistorical] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
+  const [predictedStandingsByMatchday, setPredictedStandingsByMatchday] = useState<Map<number, Standing[]>>(new Map());
   
   // Cache for API data to reduce calls
   const matchdayCache = useRef<Map<string, number>>(new Map());
@@ -93,6 +94,76 @@ export default function Home() {
     setTableDisplayMode,
     tableDisplayMode
   } = usePrediction();
+  
+  // Save predicted standings for each matchday as they're calculated
+  // Track previous standings and matchday to detect changes
+  const prevPredictedStandingsRef = useRef<Standing[]>([]);
+  const prevMatchdayRef = useRef<number>(currentMatchday);
+  
+  // Save predicted standings when they change
+  useEffect(() => {
+    if (predictedStandings.length > 0) {
+      // Check if standings actually changed (compare by points to detect real changes)
+      const standingsChanged = prevPredictedStandingsRef.current.length === 0 || 
+        JSON.stringify(predictedStandings.map(s => ({ id: s.team.id, points: s.points })).sort((a, b) => a.id - b.id)) !== 
+        JSON.stringify(prevPredictedStandingsRef.current.map(s => ({ id: s.team.id, points: s.points })).sort((a, b) => a.id - b.id));
+      
+      const matchdayChanged = currentMatchday !== prevMatchdayRef.current;
+      
+      if (standingsChanged) {
+        // Determine which matchday to save for
+        let matchdayToSave: number;
+        
+        if (matchdayChanged && currentMatchday > prevMatchdayRef.current) {
+          // Matchday incremented - the standings we have are for the PREVIOUS matchday
+          // Save them for the previous matchday (the one that was just predicted)
+          matchdayToSave = prevMatchdayRef.current;
+          // Use the previous standings (before the change) which represent the completed matchday
+          const standingsToSave = prevPredictedStandingsRef.current.length > 0 
+            ? prevPredictedStandingsRef.current 
+            : predictedStandings;
+          
+          setPredictedStandingsByMatchday(prev => {
+            const newMap = new Map(prev);
+            // Deep copy to avoid reference issues
+            newMap.set(matchdayToSave, standingsToSave.map(s => ({
+              ...s,
+              team: { ...s.team }
+            })));
+            return newMap;
+          });
+        } else {
+          // Matchday hasn't changed - save for current matchday (the one being predicted)
+          matchdayToSave = currentMatchday;
+          setPredictedStandingsByMatchday(prev => {
+            const newMap = new Map(prev);
+            // Deep copy to avoid reference issues
+            newMap.set(matchdayToSave, predictedStandings.map(s => ({
+              ...s,
+              team: { ...s.team }
+            })));
+            return newMap;
+          });
+        }
+      }
+      
+      // Update refs after processing
+      prevPredictedStandingsRef.current = [...predictedStandings];
+      prevMatchdayRef.current = currentMatchday;
+      
+      // Also save when viewing standings (final matchday)
+      if (viewingFromMatchday !== null) {
+        setPredictedStandingsByMatchday(prev => {
+          const newMap = new Map(prev);
+          newMap.set(viewingFromMatchday, predictedStandings.map(s => ({
+            ...s,
+            team: { ...s.team }
+          })));
+          return newMap;
+        });
+      }
+    }
+  }, [predictedStandings, currentMatchday, viewingFromMatchday]);
 
   // Track screen width for responsive layouts
   useEffect(() => {
@@ -135,7 +206,12 @@ export default function Home() {
     if (!selectedLeague || !standings.length) return;
     
     setSelectedHistoricalMatchday(matchday);
-    setIsComparing(false); // Reset comparison when matchday changes
+    // In forecast mode, automatically enable comparison when selecting a historical matchday
+    if (viewingFromMatchday !== null && matchday !== null) {
+      setIsComparing(true);
+    } else {
+      setIsComparing(false); // Reset comparison when matchday changes in regular mode
+    }
     
     if (matchday === null) {
       setHistoricalStandings([]);
@@ -1226,15 +1302,8 @@ export default function Home() {
                       ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
                         ? 'Final Table' 
                         : (
-                            <span className="flex flex-col">
-                              <span>Standings after</span>
-                              <span>Matchday {viewingFromMatchday || (currentMatchday > 1 ? currentMatchday - 1 : 1)}</span>
-                            </span>
-                          )
-                      : (
-                          <>
-                            {/* Integrated dropdown styled like Start Forecasting button */}
-                            {!isViewingStandings && !viewingFromMatchday && currentMatchday > 1 && (
+                            /* Dropdown for forecast mode */
+                            currentMatchday > 1 && (
                               <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
                                 <div className="relative inline-block group historical-dropdown-container">
                                   <button
@@ -1243,7 +1312,7 @@ export default function Home() {
                                     disabled={loadingHistorical || loading}
                                     className="appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] flex items-center justify-center"
                                   >
-                                    {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : 'Current Standings'}
+                                    {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : `Matchday ${viewingFromMatchday || currentMatchday}`}
                                   </button>
                                   {isDropdownOpen && (
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px]" style={{ border: '2px solid #f7e479' }}>
@@ -1258,11 +1327,19 @@ export default function Home() {
                                           onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
                                           onMouseLeave={(e) => e.currentTarget.style.color = ''}
                                         >
-                                          Current Standings
+                                          Matchday {viewingFromMatchday || currentMatchday}
                                         </button>
                                       )}
-                                      {Array.from({ length: currentMatchday - 1 }, (_, i) => i + 1)
-                                        .filter((md) => md !== selectedHistoricalMatchday)
+                                      {Array.from({ length: Math.max(0, currentMatchday - 1) }, (_, i) => i + 1)
+                                        .filter((md) => {
+                                          // Filter out the currently selected historical matchday
+                                          if (md === selectedHistoricalMatchday) return false;
+                                          // Filter out the current matchday
+                                          if (md === currentMatchday) return false;
+                                          // Only show matchdays before the current one
+                                          if (md >= currentMatchday) return false;
+                                          return true;
+                                        })
                                         .map((md) => (
                                         <button
                                           key={md}
@@ -1309,9 +1386,103 @@ export default function Home() {
                                       className="h-4 px-1.5 flex items-center rounded-r bg-card"
                                     >
                                       <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
-                                        Compare To Today
+                                        {viewingFromMatchday ? `Compare to MD ${viewingFromMatchday}` : 'Compare To Today'}
                                       </span>
                                     </div>
+                                  </div>
+                                </label>
+                              </div>
+                            )
+                          )
+                      : (
+                          <>
+                            {/* Integrated dropdown styled like Start Forecasting button */}
+                            {!isViewingStandings && !viewingFromMatchday && currentMatchday > 1 && (
+                              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                                <div className="relative inline-block group historical-dropdown-container">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    disabled={loadingHistorical || loading}
+                                    className="appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] flex items-center justify-center"
+                                  >
+                                    {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : 'Current Standings'}
+                                  </button>
+                                  {isDropdownOpen && (
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px]" style={{ border: '2px solid #f7e479' }}>
+                                      {selectedHistoricalMatchday !== null && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleHistoricalMatchdayChange(null);
+                                            setIsDropdownOpen(false);
+                                          }}
+                                          className="w-full text-center px-3 py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap text-primary hover:bg-[#f7e479] group/item"
+                                          onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
+                                          onMouseLeave={(e) => e.currentTarget.style.color = ''}
+                                        >
+                                          Current Standings
+                                        </button>
+                                      )}
+                                      {Array.from({ length: Math.max(0, currentMatchday - 1) }, (_, i) => i + 1)
+                                        .filter((md) => {
+                                          // Filter out the currently selected historical matchday
+                                          if (md === selectedHistoricalMatchday) return false;
+                                          // Filter out the last completed matchday (currentMatchday - 1) because it's "Current Standings"
+                                          if (md === currentMatchday - 1) return false;
+                                          // Only show matchdays before the current one
+                                          if (md >= currentMatchday) return false;
+                                          return true;
+                                        })
+                                        .map((md) => (
+                                        <button
+                                          key={md}
+                                          type="button"
+                                          onClick={() => {
+                                            handleHistoricalMatchdayChange(md);
+                                            setIsDropdownOpen(false);
+                                          }}
+                                          className="w-full text-center px-3 py-2 text-xs sm:text-sm font-semibold transition-colors text-primary hover:bg-[#f7e479]"
+                                          onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
+                                          onMouseLeave={(e) => e.currentTarget.style.color = ''}
+                                        >
+                                          Matchday {md}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3">
+                                    <svg className={`h-3 w-3 sm:h-4 sm:w-4 transition-colors duration-300 ${isDropdownOpen ? 'text-black' : 'text-[#f7e479]'} group-hover:text-black`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                </div>
+                                {/* Compare checkbox - always render to prevent layout shift, hide when not needed */}
+                                <label className={`flex items-center cursor-pointer ${selectedHistoricalMatchday === null ? 'opacity-0 pointer-events-none' : ''}`}>
+                                  <div className="flex items-center border border-[#f7e479] rounded">
+                                    <input
+                                      type="checkbox"
+                                      checked={isComparing}
+                                      onChange={(e) => setIsComparing(e.target.checked)}
+                                      disabled={selectedHistoricalMatchday === null}
+                                      className="h-4 w-4 border-r border-[#f7e479] rounded-l cursor-pointer appearance-none focus:ring-1 focus:ring-[#f7e479] relative flex-shrink-0"
+                                      style={{
+                                        backgroundColor: isComparing ? '#f7e479' : 'var(--card-bg)',
+                                        backgroundImage: isComparing ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23000000\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M5 13l4 4L19 7\'/%3E%3C/svg%3E")' : 'none',
+                                        backgroundSize: '70%',
+                                        backgroundPosition: 'center',
+                                        backgroundRepeat: 'no-repeat',
+                                        padding: '0',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                      <div 
+                                        className="h-4 px-1.5 flex items-center rounded-r bg-card"
+                                      >
+                                        <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
+                                          {viewingFromMatchday ? `Compare to MD ${viewingFromMatchday}` : 'Compare To Today'}
+                                        </span>
+                                      </div>
                                   </div>
                                 </label>
                               </div>
@@ -1380,25 +1551,52 @@ export default function Home() {
             </div>
             
             <StandingsTable 
-              standings={
-                loadingHistorical 
-                  ? standings 
-                  : selectedHistoricalMatchday && historicalStandings.length > 0
-                    ? historicalStandings
-                    : isViewingStandings && !viewingFromMatchday 
-                      ? predictedStandings 
-                      : viewingFromMatchday 
-                        ? predictedStandings 
-                        : standings
-              } 
+              standings={(() => {
+                if (loadingHistorical) return standings;
+                
+                // In forecast mode with selected matchday, show predicted standings for that matchday
+                if (viewingFromMatchday !== null && selectedHistoricalMatchday !== null) {
+                  const savedStandings = predictedStandingsByMatchday.get(selectedHistoricalMatchday);
+                  if (savedStandings && savedStandings.length > 0) {
+                    // Fix playedGames to match the selected matchday
+                    return savedStandings.map(s => ({
+                      ...s,
+                      playedGames: selectedHistoricalMatchday,
+                      team: { ...s.team }
+                    }));
+                  }
+                }
+                
+                // Regular historical standings
+                if (selectedHistoricalMatchday && historicalStandings.length > 0) {
+                  return historicalStandings;
+                }
+                
+                // Default predicted or current standings
+                if (isViewingStandings && !viewingFromMatchday) {
+                  return predictedStandings;
+                }
+                if (viewingFromMatchday) {
+                  return predictedStandings;
+                }
+                return standings;
+              })()} 
               initialStandings={
-                isComparing && selectedHistoricalMatchday && historicalStandings.length > 0
-                  ? standings // Compare historical to current standings
-                  : isViewingStandings || viewingFromMatchday 
-                    ? standings 
-                    : undefined
+                // In forecast mode with selected historical matchday, compare predicted to actual at that matchday
+                viewingFromMatchday !== null && selectedHistoricalMatchday !== null && historicalStandings.length > 0
+                  ? historicalStandings // Compare predicted (at selectedHistoricalMatchday) to actual (at selectedHistoricalMatchday)
+                  : isComparing && selectedHistoricalMatchday && historicalStandings.length > 0
+                    ? standings // Compare historical to current standings (regular mode)
+                    : isViewingStandings || viewingFromMatchday 
+                      ? standings 
+                      : undefined
               }
-              compareToCurrent={isComparing && selectedHistoricalMatchday !== null && historicalStandings.length > 0}
+              compareToCurrent={
+                // In forecast mode: comparing predicted to actual at selected matchday
+                (viewingFromMatchday !== null && selectedHistoricalMatchday !== null && historicalStandings.length > 0) ||
+                // In regular mode: comparing historical to current when "Compare To Today" is checked
+                (isComparing && selectedHistoricalMatchday !== null && historicalStandings.length > 0)
+              }
               loading={loadingHistorical} 
               leagueCode={selectedLeague || undefined}
               selectedTeamIds={isRaceMode ? selectedTeamIds : undefined}

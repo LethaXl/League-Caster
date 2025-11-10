@@ -19,10 +19,10 @@ function getPositionChange(team: Standing, initialStandings?: Standing[], compar
   const initialPosition = initialStandings.find(s => s.team.name === team.team.name)?.position;
   if (!initialPosition) return null;
   
-  // When comparing historical to current, we want to show change FROM historical TO current
-  // So if historical position was 5 and current is 3, that's +2 (moved up)
+  // - If historical is 1 and current is 8, that's -7 (moved down 7 positions) = red down arrow
+  // - Positive = moved up (green), Negative = moved down (red)
   if (compareToCurrent) {
-    return team.position - initialPosition; // Reverse: historical - current
+    return team.position - initialPosition; // historical - current (negative = moved down, positive = moved up)
   }
   
   return initialPosition - team.position; // Normal: initial - current
