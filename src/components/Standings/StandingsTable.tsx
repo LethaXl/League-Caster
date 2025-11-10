@@ -10,22 +10,53 @@ interface StandingsTableProps {
   leagueCode?: string;
   selectedTeamIds?: number[];
   compareToCurrent?: boolean; // When true, compares historical standings to current (reverses the calculation)
+  isForecastMode?: boolean; // When true, we're in forecast mode
+  isComparingToPast?: boolean; // When true, comparing to a past matchday (looking back)
 }
 
 // Helper function to get position change
-function getPositionChange(team: Standing, initialStandings?: Standing[], compareToCurrent?: boolean) {
+function getPositionChange(
+  team: Standing, 
+  initialStandings?: Standing[], 
+  compareToCurrent?: boolean,
+  isForecastMode?: boolean,
+  isComparingToPast?: boolean
+) {
   if (!initialStandings) return null;
   
   const initialPosition = initialStandings.find(s => s.team.name === team.team.name)?.position;
   if (!initialPosition) return null;
   
-  // - If historical is 1 and current is 8, that's -7 (moved down 7 positions) = red down arrow
-  // - Positive = moved up (green), Negative = moved down (red)
-  if (compareToCurrent) {
-    return team.position - initialPosition; // historical - current (negative = moved down, positive = moved up)
+  // Different logic based on comparison scenario per user requirements:
+  // 1. Forecast mode, comparing to current (predicted vs actual): currentPos - forecastPos
+  //    - If actual is worse (higher number) than predicted: positive = green ↑ (they need to improve)
+  //    - If actual is better (lower number) than predicted: negative = red ↓ (they're better than predicted)
+  // 2. Forecast mode, comparing to past (predicted at past vs predicted at current): pastPos - currentPos
+  //    - If they've improved: negative = red ↓ (they're better now)
+  //    - If they've fallen: positive = green ↑ (they've dropped)
+  // 3. Regular mode, comparing to past (historical vs current): pastPos - currentPos
+  //    - If they've improved: negative = red ↓ (they're better now)
+  //    - If they've fallen: positive = green ↑ (they've dropped)
+  
+  if (isForecastMode && !isComparingToPast) {
+    // Scenario 1: Comparing forecast to current (predicted vs actual)
+    // Formula: currentPos - forecastPos (actual - predicted)
+    // Example: predicted 1, actual 7 → 7 - 1 = 6 (positive = green ↑ = need to move up 6)
+    return initialPosition - team.position; // actual - predicted
+  } else if (isForecastMode && isComparingToPast) {
+    // Scenario 2: Comparing predicted at past matchday to predicted at current matchday
+    // Formula: pastPos - currentPos
+    // Example: past predicted 1, current predicted 8 → 1 - 8 = -7 (negative = red ↓ = has fallen)
+    return team.position - initialPosition; // past predicted - current predicted
+  } else if (compareToCurrent) {
+    // Scenario 3: Regular mode, comparing historical to current
+    // Formula: pastPos - currentPos
+    // Example: past 1, current 8 → 1 - 8 = -7 (negative = red ↓ = has fallen)
+    return team.position - initialPosition; // past - current
   }
   
-  return initialPosition - team.position; // Normal: initial - current
+  // Default: initial - current
+  return initialPosition - team.position;
 }
 
 // Helper function to determine European competition qualification
@@ -123,7 +154,7 @@ function RelegationIndicator({ status, color, size }: { status: 'relegated' | 'p
   );
 }
 
-export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds, compareToCurrent }: StandingsTableProps) {
+export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds, compareToCurrent, isForecastMode, isComparingToPast }: StandingsTableProps) {
   const { isRaceMode, tableDisplayMode } = usePrediction();
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileM, setIsMobileM] = useState(false);
@@ -769,7 +800,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
           </thead>
           <tbody>
             {sortedStandings.map((standing, index) => {
-              const positionChange = getPositionChange(standing, initialStandings, compareToCurrent);
+              const positionChange = getPositionChange(standing, initialStandings, compareToCurrent, isForecastMode, isComparingToPast);
               const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
               const relegationStatus = getRelegationStatus(standing.position, leagueCode);
               

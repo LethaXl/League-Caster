@@ -111,40 +111,33 @@ export default function Home() {
       const matchdayChanged = currentMatchday !== prevMatchdayRef.current;
       
       if (standingsChanged) {
-        // Determine which matchday to save for
-        let matchdayToSave: number;
-        
+        // Always save predicted standings for the matchday they correspond to
         if (matchdayChanged && currentMatchday > prevMatchdayRef.current) {
-          // Matchday incremented - the standings we have are for the PREVIOUS matchday
-          // Save them for the previous matchday (the one that was just predicted)
-          matchdayToSave = prevMatchdayRef.current;
-          // Use the previous standings (before the change) which represent the completed matchday
+          // Matchday incremented - save previous standings for the matchday that was just completed
+          const matchdayToSave = prevMatchdayRef.current;
           const standingsToSave = prevPredictedStandingsRef.current.length > 0 
             ? prevPredictedStandingsRef.current 
             : predictedStandings;
           
           setPredictedStandingsByMatchday(prev => {
             const newMap = new Map(prev);
-            // Deep copy to avoid reference issues
             newMap.set(matchdayToSave, standingsToSave.map(s => ({
               ...s,
               team: { ...s.team }
             })));
             return newMap;
           });
-        } else {
-          // Matchday hasn't changed - save for current matchday (the one being predicted)
-          matchdayToSave = currentMatchday;
-          setPredictedStandingsByMatchday(prev => {
-            const newMap = new Map(prev);
-            // Deep copy to avoid reference issues
-            newMap.set(matchdayToSave, predictedStandings.map(s => ({
-              ...s,
-              team: { ...s.team }
-            })));
-            return newMap;
-          });
         }
+        
+        // Also save for current matchday (the one being predicted or just predicted)
+        setPredictedStandingsByMatchday(prev => {
+          const newMap = new Map(prev);
+          newMap.set(currentMatchday, predictedStandings.map(s => ({
+            ...s,
+            team: { ...s.team }
+          })));
+          return newMap;
+        });
       }
       
       // Update refs after processing
@@ -208,7 +201,9 @@ export default function Home() {
     setSelectedHistoricalMatchday(matchday);
     // In forecast mode, automatically enable comparison when selecting a historical matchday
     if (viewingFromMatchday !== null && matchday !== null) {
-      setIsComparing(true);
+      setIsComparing(true); // Checked by default in forecast mode
+    } else if (matchday === null) {
+      setIsComparing(false); // Uncheck when clearing selection
     } else {
       setIsComparing(false); // Reset comparison when matchday changes in regular mode
     }
@@ -217,6 +212,7 @@ export default function Home() {
       setHistoricalStandings([]);
       return;
     }
+    
     
     setLoadingHistorical(true);
     
@@ -1330,14 +1326,21 @@ export default function Home() {
                                           Matchday {viewingFromMatchday || currentMatchday}
                                         </button>
                                       )}
-                                      {Array.from({ length: Math.max(0, currentMatchday - 1) }, (_, i) => i + 1)
+                                      {Array.from({ length: Math.max(0, viewingFromMatchday || currentMatchday - 1) }, (_, i) => i + 1)
                                         .filter((md) => {
                                           // Filter out the currently selected historical matchday
                                           if (md === selectedHistoricalMatchday) return false;
-                                          // Filter out the current matchday
-                                          if (md === currentMatchday) return false;
-                                          // Only show matchdays before the current one
-                                          if (md >= currentMatchday) return false;
+                                          // In forecast mode, show all matchdays up to viewingFromMatchday (including predicted ones)
+                                          // In regular mode, only show matchdays before currentMatchday
+                                          if (viewingFromMatchday !== null) {
+                                            // Forecast mode: show matchdays from 1 to viewingFromMatchday, excluding the current selected one
+                                            if (md > viewingFromMatchday) return false;
+                                            // Don't show the current matchday button text matchday (viewingFromMatchday)
+                                            if (md === viewingFromMatchday) return false;
+                                          } else {
+                                            // Regular mode: only show matchdays before currentMatchday
+                                            if (md >= currentMatchday) return false;
+                                          }
                                           return true;
                                         })
                                         .map((md) => (
@@ -1582,21 +1585,25 @@ export default function Home() {
                 return standings;
               })()} 
               initialStandings={
-                // In forecast mode with selected historical matchday, compare predicted to actual at that matchday
-                viewingFromMatchday !== null && selectedHistoricalMatchday !== null && historicalStandings.length > 0
-                  ? historicalStandings // Compare predicted (at selectedHistoricalMatchday) to actual (at selectedHistoricalMatchday)
-                  : isComparing && selectedHistoricalMatchday && historicalStandings.length > 0
+                // In forecast mode with selected historical matchday and comparison enabled, compare predicted at selected matchday to predicted at current matchday
+                viewingFromMatchday !== null && selectedHistoricalMatchday !== null && isComparing
+                  ? predictedStandings // Compare predicted (at selectedHistoricalMatchday) to predicted (at viewingFromMatchday/currentMatchday)
+                  : isComparing && selectedHistoricalMatchday && historicalStandings.length > 0 && viewingFromMatchday === null
                     ? standings // Compare historical to current standings (regular mode)
-                    : isViewingStandings || viewingFromMatchday 
-                      ? standings 
-                      : undefined
+                  : viewingFromMatchday !== null && selectedHistoricalMatchday === null
+                    ? standings // Default comparison in forecast mode: compare predicted to actual current standings
+                    : undefined // No comparison when checkbox is unchecked in other cases
               }
               compareToCurrent={
-                // In forecast mode: comparing predicted to actual at selected matchday
-                (viewingFromMatchday !== null && selectedHistoricalMatchday !== null && historicalStandings.length > 0) ||
+                // In forecast mode: comparing predicted at selected matchday to predicted at current matchday when checkbox is checked
+                (viewingFromMatchday !== null && selectedHistoricalMatchday !== null && isComparing) ||
+                // In forecast mode: default comparison of predicted to actual current standings
+                (viewingFromMatchday !== null && selectedHistoricalMatchday === null) ||
                 // In regular mode: comparing historical to current when "Compare To Today" is checked
-                (isComparing && selectedHistoricalMatchday !== null && historicalStandings.length > 0)
+                (isComparing && selectedHistoricalMatchday !== null && historicalStandings.length > 0 && viewingFromMatchday === null)
               }
+              isForecastMode={viewingFromMatchday !== null}
+              isComparingToPast={viewingFromMatchday !== null && selectedHistoricalMatchday !== null && isComparing}
               loading={loadingHistorical} 
               leagueCode={selectedLeague || undefined}
               selectedTeamIds={isRaceMode ? selectedTeamIds : undefined}
