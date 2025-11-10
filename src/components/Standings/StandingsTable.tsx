@@ -9,16 +9,23 @@ interface StandingsTableProps {
   loading: boolean;
   leagueCode?: string;
   selectedTeamIds?: number[];
+  compareToCurrent?: boolean; // When true, compares historical standings to current (reverses the calculation)
 }
 
 // Helper function to get position change
-function getPositionChange(team: Standing, initialStandings?: Standing[]) {
+function getPositionChange(team: Standing, initialStandings?: Standing[], compareToCurrent?: boolean) {
   if (!initialStandings) return null;
   
   const initialPosition = initialStandings.find(s => s.team.name === team.team.name)?.position;
   if (!initialPosition) return null;
   
-  return initialPosition - team.position;
+  // When comparing historical to current, we want to show change FROM historical TO current
+  // So if historical position was 5 and current is 3, that's +2 (moved up)
+  if (compareToCurrent) {
+    return team.position - initialPosition; // Reverse: historical - current
+  }
+  
+  return initialPosition - team.position; // Normal: initial - current
 }
 
 // Helper function to determine European competition qualification
@@ -116,7 +123,7 @@ function RelegationIndicator({ status, color, size }: { status: 'relegated' | 'p
   );
 }
 
-export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds }: StandingsTableProps) {
+export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds, compareToCurrent }: StandingsTableProps) {
   const { isRaceMode, tableDisplayMode } = usePrediction();
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileM, setIsMobileM] = useState(false);
@@ -762,7 +769,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
           </thead>
           <tbody>
             {sortedStandings.map((standing, index) => {
-              const positionChange = getPositionChange(standing, initialStandings);
+              const positionChange = getPositionChange(standing, initialStandings, compareToCurrent);
               const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
               const relegationStatus = getRelegationStatus(standing.position, leagueCode);
               
