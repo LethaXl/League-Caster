@@ -255,6 +255,12 @@ export default function Home() {
         setViewingFromMatchday(null);
       }
       
+      // Clear selected historical matchday when viewing standings from predictions
+      // This ensures we show current predicted standings, not a previously viewed historical matchday
+      setSelectedHistoricalMatchday(null);
+      setHistoricalStandings([]);
+      setIsComparing(false);
+      
       setShowPredictions(false);
     }
   }, [isViewingStandings]);
@@ -1532,6 +1538,9 @@ export default function Home() {
                         setShowPredictions(true);
                         setShowModeSelection(false);
                         setViewingFromMatchday(null);
+                        setSelectedHistoricalMatchday(null);
+                        setHistoricalStandings([]);
+                        setIsComparing(false);
                       }}
                       className="px-4 xs:px-6 sm:px-8 py-1.5 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold text-sm sm:text-base"
                     >
