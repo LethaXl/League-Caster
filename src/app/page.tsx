@@ -237,6 +237,16 @@ export default function Home() {
       return;
     }
     
+    // In forecast mode, check for saved predicted standings first
+    if (viewingFromMatchday !== null) {
+      const savedPredictedStandings = predictedStandingsByMatchday.get(Number(matchday));
+      if (savedPredictedStandings && savedPredictedStandings.length > 0) {
+        // Use saved predicted standings instead of calculating from completed matches
+        setHistoricalStandings([]); // Clear historical standings since we're using predicted ones
+        return;
+      }
+    }
+    
     // Check cache first for calculated standings
     const cacheKey = `${selectedLeague}-${matchday}`;
     const cachedStandings = historicalStandingsCache.current.get(cacheKey);
@@ -1712,25 +1722,25 @@ export default function Home() {
               standings={(() => {
                 if (loadingHistorical) return standings;
                 
-                // In forecast mode with selected historical matchday, ALWAYS show historical standings (actual fixtures)
-                // Only show predicted standings if it's a future/predicted matchday (greater than current matchday)
+                // In forecast mode with selected historical matchday, check for saved predicted standings first
+                // Only fall back to historical standings (actual fixtures) if no saved predictions exist
                 if (viewingFromMatchday !== null && selectedHistoricalMatchday !== null) {
-                  // If selected matchday is in the past (before current matchday), show historical standings
-                  if (selectedHistoricalMatchday < currentMatchday) {
-                    if (historicalStandings.length > 0) {
-                      return historicalStandings;
-                    }
-                  } else {
-                    // For predicted matchdays, show predicted standings
-                    // Normalize key to Number when reading from Map
-                    const savedStandings = predictedStandingsByMatchday.get(Number(selectedHistoricalMatchday));
-                    if (savedStandings && savedStandings.length > 0) {
-                      return savedStandings.map(s => ({
-                        ...s,
-                        playedGames: selectedHistoricalMatchday,
-                        team: { ...s.team }
-                      }));
-                    }
+                  // First, check if we have saved predicted standings for this matchday
+                  // Normalize key to Number when reading from Map
+                  const savedStandings = predictedStandingsByMatchday.get(Number(selectedHistoricalMatchday));
+                  if (savedStandings && savedStandings.length > 0) {
+                    // Show saved predicted standings (regardless of whether matchday is past or future)
+                    return savedStandings.map(s => ({
+                      ...s,
+                      playedGames: selectedHistoricalMatchday,
+                      team: { ...s.team }
+                    }));
+                  }
+                  
+                  // If no saved predicted standings, fall back to historical standings (actual fixtures)
+                  // This only applies if selected matchday is in the past (before current matchday)
+                  if (selectedHistoricalMatchday < currentMatchday && historicalStandings.length > 0) {
+                    return historicalStandings;
                   }
                 }
                 
