@@ -1274,8 +1274,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     }
 
     // Process predictions and update standings
-    // Only process matches that have not already been played
-    const unplayedMatches = filterAlreadyPlayedMatches(matches);
+    // On the final matchday, process ALL matches regardless of date to ensure nothing is missed
+    // On other matchdays, only process matches that have not already been played
+    const unplayedMatches = currentMatchday === MAX_MATCHDAY ? matches : filterAlreadyPlayedMatches(matches);
 
     unplayedMatches.forEach(match => {
       const prediction = predictions.get(match.id);

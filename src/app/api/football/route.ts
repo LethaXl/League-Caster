@@ -62,11 +62,11 @@ export async function GET(request: Request) {
           });
         } else {
           // Use the regular method (upcoming matches only)
-          const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
-          return NextResponse.json({ 
-            matches,
-            source: 'upstash_redis_cache'
-          });
+        const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
+        return NextResponse.json({ 
+          matches,
+          source: 'upstash_redis_cache'
+        });
         }
       }
     }
