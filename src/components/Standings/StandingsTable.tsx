@@ -89,6 +89,15 @@ function getEuropeanCompetition(position: number, leagueCode?: string) {
   }
 }
 
+// Helper function to determine UCL status
+function getUCLStatus(position: number, leagueCode?: string): { status: 'qualified' | 'playoff' | null } {
+  if (leagueCode === 'CL') {
+    if (position <= 8) return { status: 'qualified' };
+    if (position >= 9 && position <= 24) return { status: 'playoff' };
+  }
+  return { status: null };
+}
+
 // Helper function to determine relegation status
 function getRelegationStatus(position: number, leagueCode?: string): { status: 'relegated' | 'playoff' | null; color: string } {
   if (!leagueCode) return { status: null, color: '' };
@@ -772,12 +781,12 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     
     // If UCL has specific styling, use it; otherwise use default styling
     if (leagueCode === 'CL') {
-      return `${highlightRow ? `bg-[#FFD700]/10 ${uclBorderClass}` : `${uclBackgroundClass} ${uclBorderClass}`} 
-              hover:bg-black/10 transition-all duration-300 ease-in-out`;
+      return `${highlightRow ? `bg-[#ebcd28]/20 ${uclBorderClass}` : `${uclBackgroundClass} ${uclBorderClass}`} 
+              ${highlightRow ? 'hover:bg-[#ebcd28]/30' : 'hover:bg-black/10'} transition-all duration-300 ease-in-out`;
     }
     
-    return `${highlightRow ? 'bg-[#FFD700]/10' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
-            hover:bg-black/10 transition-all duration-300 ease-in-out`;
+    return `${highlightRow ? 'bg-[#ebcd28]/20' : index % 2 === 1 ? 'bg-transparent' : 'bg-[#2A2A2A]'} 
+            ${highlightRow ? 'hover:bg-[#ebcd28]/30' : 'hover:bg-black/10'} transition-all duration-300 ease-in-out`;
   };
 
   return (
@@ -803,13 +812,26 @@ export default function StandingsTable({ standings, initialStandings, loading, l
               const positionChange = getPositionChange(standing, initialStandings, compareToCurrent, isForecastMode, isComparingToPast);
               const euroCompetition = getEuropeanCompetition(standing.position, leagueCode);
               const relegationStatus = getRelegationStatus(standing.position, leagueCode);
+              const uclStatus = getUCLStatus(standing.position, leagueCode);
+              const isSelectedTeam = isRaceMode && tableDisplayMode === 'full' && selectedTeamIds?.includes(standing.team.id);
               
               return (
                 <tr 
                   key={standing.team.id} 
                   className={getRowStyle(standing, index)}
                 >
-                  <td className="w-16 px-0 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary">
+                  <td className="w-16 px-0 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary relative">
+                    {/* Yellow bar on left for regular leagues in race mode */}
+                    {isSelectedTeam && leagueCode !== 'CL' && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#ebcd28' }} />
+                    )}
+                    {/* Yellow bar for UCL in race mode - right of green/blue bar if in playoff/qualified position, otherwise on left */}
+                    {isSelectedTeam && leagueCode === 'CL' && (
+                      <div className="absolute top-0 bottom-0 w-1" style={{ 
+                        left: (standing.position <= 24) ? '4px' : '0px', 
+                        backgroundColor: '#ebcd28' 
+                      }} />
+                    )}
                     <div className={`flex flex-row items-center justify-center h-full ${isMobileM ? 'gap-0' : 'gap-0'}`}>
                       <span className="block w-6 text-center">{standing.position}</span>
                       <span className="flex flex-row items-center" style={{ minWidth: badgeSize, minHeight: badgeSize }}>

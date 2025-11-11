@@ -1292,18 +1292,18 @@ export default function Home() {
         {(!showPredictions && !showModeSelection) || isViewingStandings ? (
           <div className="bg-card rounded-lg p-2 sm:p-6 my-6 sm:my-10 ml-1 mr-1 sm:ml-0">
             <div className="mb-2 sm:mb-4">
-              <div className="flex flex-row justify-between items-start sm:items-center mb-2 sm:mb-4 gap-2 sm:gap-4">
-                <div className="flex items-start sm:items-center gap-2 sm:gap-3">
-                  <h2
-                    className={
+              <div className="flex flex-row justify-between items-center mb-2 sm:mb-4 gap-2 sm:gap-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                <h2
+                  className={
                       `text-base sm:text-xl font-semibold sm:font-bold text-primary flex items-center gap-2 sm:gap-3 ` +
-                      ((isViewingStandings || viewingFromMatchday) && (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) ? 'text-center w-full mx-auto my-0' : 'mb-2 sm:mb-0')
-                    }
-                  >
-                    {isViewingStandings || viewingFromMatchday 
-                      ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
-                        ? 'Final Table' 
-                        : (
+                    ((isViewingStandings || viewingFromMatchday) && (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) ? 'text-center w-full mx-auto my-0' : 'mb-2 sm:mb-0')
+                  }
+                >
+                  {isViewingStandings || viewingFromMatchday 
+                    ? (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) 
+                      ? 'Final Table' 
+                      : (
                             /* Dropdown for forecast mode */
                             currentMatchday > 1 && (
                               <div className={`flex flex-col sm:flex-row items-center ${selectedHistoricalMatchday === null ? 'justify-center sm:justify-start sm:gap-4 min-h-[44px] sm:min-h-0' : 'gap-3 sm:gap-4 justify-start'}`}>
@@ -1396,15 +1396,15 @@ export default function Home() {
                                     >
                                       <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
                                         {viewingFromMatchday ? `Compare to MD ${viewingFromMatchday}` : 'Compare To Today'}
-                                      </span>
+                          </span>
                                     </div>
                                   </div>
                                 </label>
                               </div>
                             )
-                          )
-                      : (
-                          <>
+                        )
+                    : (
+                        <>
                             {/* Integrated dropdown styled like Start Forecasting button */}
                             {!isViewingStandings && !viewingFromMatchday && currentMatchday > 1 && (
                               <div className={`flex flex-col sm:flex-row items-center ${selectedHistoricalMatchday === null ? 'justify-center sm:justify-start sm:gap-4 min-h-[44px] sm:min-h-0' : 'gap-3 sm:gap-4 justify-start'}`}>
@@ -1494,17 +1494,17 @@ export default function Home() {
                                       >
                                         <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
                                           {viewingFromMatchday ? `Compare to MD ${viewingFromMatchday}` : 'Compare To Today'}
-                                        </span>
+                          </span>
                                       </div>
                                   </div>
                                 </label>
                               </div>
                             )}
-                            </>
+                        </>
                       )}
-                  </h2>
+                </h2>
                 </div>
-                <div className="flex space-x-4">
+                <div className="flex items-center space-x-4">
                   {/* Show Prediction Summary button for race mode at final matchday */}
                   {isRaceMode && isViewingStandings && 
                    (viewingFromMatchday === maxMatchday || (currentMatchday === maxMatchday && !viewingFromMatchday)) && (
@@ -1546,7 +1546,7 @@ export default function Home() {
                         setHistoricalStandings([]);
                         setIsComparing(false);
                       }}
-                      className="px-4 xs:px-6 sm:px-8 py-1.5 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold text-sm sm:text-base"
+                      className="px-3 sm:px-4 text-xs sm:text-sm bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-[28px] sm:h-[36px] flex items-center justify-center"
                     >
                       Back to Predictions
                     </button>
