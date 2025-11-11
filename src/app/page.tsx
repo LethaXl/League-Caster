@@ -72,6 +72,8 @@ export default function Home() {
   const matchdayCache = useRef<Map<string, number>>(new Map());
   const matchesCache = useRef<Map<string, Match[]>>(new Map());
   const standingsCache = useRef<Map<string, Standing[]>>(new Map());
+  const historicalStandingsCache = useRef<Map<string, Standing[]>>(new Map());
+  const allCompletedMatchesCache = useRef<Map<string, Match[]>>(new Map()); // Cache all completed matches per league
   // Add state to pass fetched matches to PredictionForm
   const [initialMatches, setInitialMatches] = useState<Match[]>([]);
   // Add initialization flag to track if a reset has been done on this session
@@ -213,30 +215,57 @@ export default function Home() {
       return;
     }
     
+    // Check cache first for calculated standings
+    const cacheKey = `${selectedLeague}-${matchday}`;
+    const cachedStandings = historicalStandingsCache.current.get(cacheKey);
     
-    setLoadingHistorical(true);
-    
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      setError('Request timed out. Please try again.');
-      setLoadingHistorical(false);
-    }, 15000); // 15 seconds timeout
-    
-    try {
-      // Get all completed matches up to the selected matchday
-      const completedMatches = await getCompletedMatchesUpToMatchday(selectedLeague, matchday);
-      
-      // Calculate historical standings from completed matches
-      const calculatedStandings = calculateHistoricalStandings(standings, completedMatches);
-      setHistoricalStandings(calculatedStandings);
-      clearTimeout(timeoutId);
-    } catch (error) {
-      clearTimeout(timeoutId);
-      console.error('Error fetching historical standings:', error);
-      setError('Failed to load historical standings. Please try again.');
-    } finally {
-      setLoadingHistorical(false);
+    if (cachedStandings) {
+      // Use cached data
+      setHistoricalStandings(cachedStandings);
+      return;
     }
+    
+    // Check if we have all completed matches cached for this league
+    let allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
+    
+    if (!allCompletedMatches) {
+      // Fetch all completed matches for the league (one API call)
+      setLoadingHistorical(true);
+      
+      const timeoutId = setTimeout(() => {
+        setError('Request timed out. Please try again.');
+        setLoadingHistorical(false);
+      }, 15000);
+      
+      try {
+        // Fetch all matches up to max matchday to get all completed matches
+        allCompletedMatches = await getCompletedMatchesUpToMatchday(selectedLeague, maxMatchday);
+        // Cache all completed matches for this league
+        allCompletedMatchesCache.current.set(selectedLeague, allCompletedMatches);
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('Error fetching all completed matches:', error);
+        setError('Failed to load historical standings. Please try again.');
+        setLoadingHistorical(false);
+        return;
+      } finally {
+        setLoadingHistorical(false);
+      }
+    }
+    
+    // Filter matches up to the selected matchday
+    const completedMatchesUpToMatchday = allCompletedMatches.filter(
+      (match: Match) => match.matchday !== undefined && match.matchday <= matchday
+    );
+    
+    // Calculate historical standings from filtered matches
+    const calculatedStandings = calculateHistoricalStandings(standings, completedMatchesUpToMatchday);
+    
+    // Cache the calculated standings for this specific matchday
+    historicalStandingsCache.current.set(cacheKey, calculatedStandings);
+    
+    setHistoricalStandings(calculatedStandings);
   };
   
   // Check if we're at the final matchday for the current league
