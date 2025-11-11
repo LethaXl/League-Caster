@@ -1317,7 +1317,7 @@ export default function Home() {
                                     {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : `Matchday ${viewingFromMatchday || currentMatchday}`}
                                   </button>
                                   {isDropdownOpen && (
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px]" style={{ border: '2px solid #f7e479' }}>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px] overflow-y-auto max-h-[252px]" style={{ border: '2px solid #f7e479' }}>
                                       {selectedHistoricalMatchday !== null && (
                                         <button
                                           type="button"
@@ -1422,7 +1422,7 @@ export default function Home() {
                                     {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : 'Current Standings'}
                                   </button>
                                   {isDropdownOpen && (
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px]" style={{ border: '2px solid #f7e479' }}>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px] overflow-y-auto max-h-[252px]" style={{ border: '2px solid #f7e479' }}>
                                       {selectedHistoricalMatchday !== null && (
                                         <button
                                           type="button"
