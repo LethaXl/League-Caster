@@ -1292,8 +1292,8 @@ export default function Home() {
         {(!showPredictions && !showModeSelection) || isViewingStandings ? (
           <div className="bg-card rounded-lg p-2 sm:p-6 my-6 sm:my-10 ml-1 mr-1 sm:ml-0">
             <div className="mb-2 sm:mb-4">
-              <div className="flex flex-row justify-between items-center mb-2 sm:mb-4 gap-2 sm:gap-4">
-                <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex flex-row justify-between items-start sm:items-center mb-2 sm:mb-4 gap-2 sm:gap-4">
+                <div className="flex items-start sm:items-center gap-2 sm:gap-3">
                   <h2
                     className={
                       `text-base sm:text-xl font-semibold sm:font-bold text-primary flex items-center gap-2 sm:gap-3 ` +
@@ -1306,7 +1306,7 @@ export default function Home() {
                         : (
                             /* Dropdown for forecast mode */
                             currentMatchday > 1 && (
-                              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                              <div className={`flex flex-col sm:flex-row items-center ${selectedHistoricalMatchday === null ? 'justify-center sm:justify-start sm:gap-4 min-h-[44px] sm:min-h-0' : 'gap-3 sm:gap-4 justify-start'}`}>
                                 <div className="relative inline-block group historical-dropdown-container">
                                   <button
                                     type="button"
@@ -1373,7 +1373,7 @@ export default function Home() {
                                   </div>
                                 </div>
                                 {/* Compare checkbox - always render to prevent layout shift, hide when not needed */}
-                                <label className={`flex items-center cursor-pointer ${selectedHistoricalMatchday === null ? 'opacity-0 pointer-events-none' : ''}`}>
+                                <label className={`flex items-center cursor-pointer transition-all duration-300 ${selectedHistoricalMatchday === null ? 'opacity-0 pointer-events-none h-0 overflow-hidden m-0 p-0' : ''}`}>
                                   <div className="flex items-center border border-[#f7e479] rounded">
                                     <input
                                       type="checkbox"
@@ -1407,13 +1407,17 @@ export default function Home() {
                           <>
                             {/* Integrated dropdown styled like Start Forecasting button */}
                             {!isViewingStandings && !viewingFromMatchday && currentMatchday > 1 && (
-                              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                              <div className={`flex flex-col sm:flex-row items-center ${selectedHistoricalMatchday === null ? 'justify-center sm:justify-start sm:gap-4 min-h-[44px] sm:min-h-0' : 'gap-3 sm:gap-4 justify-start'}`}>
                                 <div className="relative inline-block group historical-dropdown-container">
                                   <button
                                     type="button"
                                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                                     disabled={loadingHistorical || loading}
-                                    className="appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] flex items-center justify-center"
+                                    className={`appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 flex items-center justify-center ${
+                                      selectedHistoricalMatchday === null 
+                                        ? 'w-[100px] sm:w-[180px] h-auto min-h-[28px] sm:h-[36px] py-1 sm:py-0 whitespace-normal sm:whitespace-nowrap leading-tight' 
+                                        : 'w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] whitespace-nowrap'
+                                    }`}
                                   >
                                     {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : 'Current Standings'}
                                   </button>
@@ -1467,7 +1471,7 @@ export default function Home() {
                                   </div>
                                 </div>
                                 {/* Compare checkbox - always render to prevent layout shift, hide when not needed */}
-                                <label className={`flex items-center cursor-pointer ${selectedHistoricalMatchday === null ? 'opacity-0 pointer-events-none' : ''}`}>
+                                <label className={`flex items-center cursor-pointer transition-all duration-300 ${selectedHistoricalMatchday === null ? 'opacity-0 pointer-events-none h-0 overflow-hidden m-0 p-0' : ''}`}>
                                   <div className="flex items-center border border-[#f7e479] rounded">
                                     <input
                                       type="checkbox"
@@ -1497,7 +1501,7 @@ export default function Home() {
                               </div>
                             )}
                             </>
-                          )}
+                      )}
                   </h2>
                 </div>
                 <div className="flex space-x-4">
@@ -1550,7 +1554,7 @@ export default function Home() {
                   {!isViewingStandings && (
                     <button
                       onClick={handleStartPredictions}
-                      className="px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-base bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
+                      className="px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-base bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-auto min-h-[28px] sm:h-[36px] flex items-center justify-center leading-tight"
                     >
                       <span className="block sm:hidden">
                         Start<br />Forecasting
