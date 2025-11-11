@@ -228,9 +228,9 @@ export default function Home() {
       setIsComparing(true); // Checked by default in forecast mode
     } else if (matchday === null) {
       setIsComparing(false); // Uncheck when clearing selection
-    } else {
-      setIsComparing(false); // Reset comparison when matchday changes in regular mode
     }
+    // In regular mode, preserve the isComparing state when switching between matchdays
+    // (don't reset it - let the user's checkbox preference persist)
     
     if (matchday === null) {
       setHistoricalStandings([]);
