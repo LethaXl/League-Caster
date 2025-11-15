@@ -12,6 +12,8 @@ interface StandingsTableProps {
   compareToCurrent?: boolean; // When true, compares historical standings to current (reverses the calculation)
   isForecastMode?: boolean; // When true, we're in forecast mode
   isComparingToPast?: boolean; // When true, comparing to a past matchday (looking back)
+  teamForms?: Map<number, ('W' | 'D' | 'L')[]>; // Pre-fetched team forms
+  formsLoading?: boolean; // Whether forms are still loading
 }
 
 // Helper function to get position change
@@ -27,16 +29,7 @@ function getPositionChange(
   const initialPosition = initialStandings.find(s => s.team.name === team.team.name)?.position;
   if (!initialPosition) return null;
   
-  // Different logic based on comparison scenario per user requirements:
-  // 1. Forecast mode, comparing to current (predicted vs actual): currentPos - forecastPos
-  //    - If actual is worse (higher number) than predicted: positive = green ↑ (they need to improve)
-  //    - If actual is better (lower number) than predicted: negative = red ↓ (they're better than predicted)
-  // 2. Forecast mode, comparing to past (predicted at past vs predicted at current): pastPos - currentPos
-  //    - If they've improved: negative = red ↓ (they're better now)
-  //    - If they've fallen: positive = green ↑ (they've dropped)
-  // 3. Regular mode, comparing to past (historical vs current): pastPos - currentPos
-  //    - If they've improved: negative = red ↓ (they're better now)
-  //    - If they've fallen: positive = green ↑ (they've dropped)
+
   
   if (isForecastMode && !isComparingToPast) {
     // Scenario 1: Comparing forecast to current (predicted vs actual)
@@ -163,12 +156,26 @@ function RelegationIndicator({ status, color, size }: { status: 'relegated' | 'p
   );
 }
 
-export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds, compareToCurrent, isForecastMode, isComparingToPast }: StandingsTableProps) {
-  const { isRaceMode, tableDisplayMode } = usePrediction();
+export default function StandingsTable({ standings, initialStandings, loading, leagueCode, selectedTeamIds, compareToCurrent, isForecastMode, isComparingToPast, teamForms: propTeamForms, formsLoading = false }: StandingsTableProps) {
+  const { isRaceMode, tableDisplayMode, currentMatchday } = usePrediction();
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileM, setIsMobileM] = useState(false);
   const [visibleStandings, setVisibleStandings] = useState<Standing[]>(standings);
   const [animating, setAnimating] = useState(false);
+  const [formsReady, setFormsReady] = useState(false);
+  
+  // Use forms from prop if provided, otherwise use empty map
+  const displayForms = propTeamForms || new Map<number, ('W' | 'D' | 'L')[]>();
+  
+  // Track when forms become available to trigger fade-in - no delay
+  useEffect(() => {
+    if (!formsLoading && displayForms.size > 0) {
+      // Immediately trigger fade-in when forms are ready
+      setFormsReady(true);
+    } else if (formsLoading) {
+      setFormsReady(false);
+    }
+  }, [displayForms, formsLoading]);
   
   // Handle smooth transitions when table display mode or filtered teams change
   useEffect(() => {
@@ -227,7 +234,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
-  
+
   // Set badge size based on screen size
   const badgeSize = isMobile ? 9 : 15;
   
@@ -753,6 +760,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
         case 5: return "w-8"; // L
         case 6: return "w-10"; // GD
         case 7: return "w-10"; // Pts
+        case 8: return "w-16"; // Form
         default: return "";
       }
     }
@@ -805,6 +813,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
               <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(5)}`}>L</th>
               <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(6)}`}>GD</th>
               <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(7)}`}>Pts</th>
+              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(8)}`}>Form →</th>
             </tr>
           </thead>
           <tbody>
@@ -867,6 +876,89 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                     {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
                   </td>
                   <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm font-bold text-primary text-center ${getColumnClass(7)}`}>{standing.points}</td>
+                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-center ${getColumnClass(8)}`}>
+                    <div className="flex items-center justify-center gap-0.5 sm:gap-1 relative">
+                      {(() => {
+                        const form = displayForms.get(standing.team.id) || [];
+                        const hasForm = form.length > 0;
+                        const showPlaceholder = formsLoading || (hasForm && !formsReady);
+                        
+                        return (
+                          <>
+                            {/* Placeholder circles - fade out when forms are ready */}
+                            {showPlaceholder && (
+                              <div className="absolute inset-0 flex items-center justify-center gap-0.5 sm:gap-1">
+                                {Array.from({ length: 5 }).map((_, idx) => (
+                                  <div
+                                    key={`placeholder-${idx}`}
+                                    className="rounded-full bg-gray-600/30 flex items-center justify-center transition-opacity duration-300 ease-in-out"
+                                    style={{ 
+                                      width: isMobile ? '1rem' : '1.25rem', 
+                                      height: isMobile ? '1rem' : '1.25rem', 
+                                      minWidth: isMobile ? '1rem' : '1.25rem', 
+                                      minHeight: isMobile ? '1rem' : '1.25rem',
+                                      maxWidth: isMobile ? '1rem' : '1.25rem',
+                                      maxHeight: isMobile ? '1rem' : '1.25rem',
+                                      borderRadius: '50%',
+                                      opacity: hasForm && formsReady ? 0 : 1
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Actual form circles - fade in when ready */}
+                            {hasForm && (
+                              <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                                {[...form].reverse().map((result, idx) => {
+                                  const bgColor = result === 'W' ? 'bg-green-500' : result === 'D' ? 'bg-gray-500' : 'bg-red-500';
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={`rounded-full ${bgColor} flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold transition-opacity duration-300 ease-in-out`}
+                                      style={{ 
+                                        width: isMobile ? '1rem' : '1.25rem', 
+                                        height: isMobile ? '1rem' : '1.25rem', 
+                                        minWidth: isMobile ? '1rem' : '1.25rem', 
+                                        minHeight: isMobile ? '1rem' : '1.25rem',
+                                        maxWidth: isMobile ? '1rem' : '1.25rem',
+                                        maxHeight: isMobile ? '1rem' : '1.25rem',
+                                        borderRadius: '50%',
+                                        opacity: formsReady ? 1 : 0
+                                      }}
+                                    >
+                                      {result}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            
+                            {/* Show placeholders if no form and not loading */}
+                            {!hasForm && !formsLoading && (
+                              <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                                {Array.from({ length: 5 }).map((_, idx) => (
+                                  <div
+                                    key={`empty-${idx}`}
+                                    className="rounded-full bg-gray-600/30 flex items-center justify-center"
+                                    style={{ 
+                                      width: isMobile ? '1rem' : '1.25rem', 
+                                      height: isMobile ? '1rem' : '1.25rem', 
+                                      minWidth: isMobile ? '1rem' : '1.25rem', 
+                                      minHeight: isMobile ? '1rem' : '1.25rem',
+                                      maxWidth: isMobile ? '1rem' : '1.25rem',
+                                      maxHeight: isMobile ? '1rem' : '1.25rem',
+                                      borderRadius: '50%'
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </td>
                 </tr>
               );
             })}

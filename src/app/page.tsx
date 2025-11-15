@@ -7,6 +7,9 @@ import PredictionForm from '@/components/Predictions/PredictionForm';
 import ModeSelection from '@/components/Predictions/ModeSelection';
 import PredictionSummary from '@/components/Predictions/PredictionSummary';
 import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings } from '@/services/football-api';
+
+// Cache for team forms (shared with StandingsTable)
+const teamFormsCache = new Map<string, Map<number, ('W' | 'D' | 'L')[]>>();
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Match } from '@/types/predictions';
 import { Prediction } from '@/types/predictions';
@@ -67,6 +70,8 @@ export default function Home() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
   const [predictedStandingsByMatchday, setPredictedStandingsByMatchday] = useState<Map<number, Standing[]>>(new Map());
+  const [teamForms, setTeamForms] = useState<Map<number, ('W' | 'D' | 'L')[]>>(new Map());
+  const [formsLoading, setFormsLoading] = useState(false);
   
   // Cache for API data to reduce calls
   const matchdayCache = useRef<Map<string, number>>(new Map());
@@ -74,6 +79,8 @@ export default function Home() {
   const standingsCache = useRef<Map<string, Standing[]>>(new Map());
   const historicalStandingsCache = useRef<Map<string, Standing[]>>(new Map());
   const allCompletedMatchesCache = useRef<Map<string, Match[]>>(new Map()); // Cache all completed matches per league
+  const fetchingFormsRef = useRef<Map<string, boolean>>(new Map()); // Track ongoing form fetches to prevent duplicates
+  const fetchingDataRef = useRef<string | null>(null); // Track ongoing data fetch to prevent duplicates
   // Add state to pass fetched matches to PredictionForm
   const [initialMatches, setInitialMatches] = useState<Match[]>([]);
   // Add initialization flag to track if a reset has been done on this session
@@ -354,8 +361,137 @@ export default function Home() {
     }
   }, [isViewingStandings, viewingFromMatchday, predictedStandingsByMatchday, currentMatchday, selectedLeague, isComparing, selectedHistoricalMatchday]);
 
+  // Calculate team forms from completed matches and standings
+  // Helper function to convert prediction to match result (W/D/L) for a team
+  const getPredictionResult = useCallback((prediction: Prediction, teamId: number, match: Match): 'W' | 'D' | 'L' | null => {
+    const isHome = match.homeTeam.id === teamId;
+    
+    switch (prediction.type) {
+      case 'home':
+        return isHome ? 'W' : 'L';
+      case 'away':
+        return isHome ? 'L' : 'W';
+      case 'draw':
+        return 'D';
+      case 'custom':
+        if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
+          const homeScore = prediction.homeGoals;
+          const awayScore = prediction.awayGoals;
+          if (isHome) {
+            if (homeScore > awayScore) return 'W';
+            if (homeScore < awayScore) return 'L';
+            return 'D';
+          } else {
+            if (awayScore > homeScore) return 'W';
+            if (awayScore < homeScore) return 'L';
+            return 'D';
+          }
+        }
+        return 'D';
+      default:
+        return null;
+    }
+  }, []);
+
+  // Helper function to get predicted matches from localStorage up to a matchday
+  const getPredictedMatchesUpToMatchday = useCallback((leagueCode: string, upToMatchday: number): Match[] => {
+    const allMatches: Match[] = [];
+    const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${leagueCode}`) || '{}');
+    
+    // Get matches from localStorage for each matchday up to target
+    for (let md = 1; md <= upToMatchday; md++) {
+      try {
+        const matchesKey = `${leagueCode}_md${md}_all`;
+        const storedMatches = localStorage.getItem(matchesKey);
+        
+        if (storedMatches) {
+          const parsedMatches = JSON.parse(storedMatches) as Match[];
+          // Only include matches that have predictions
+          const matchesWithPredictions = parsedMatches.filter(match => 
+            savedPredictions[match.id] !== undefined
+          );
+          allMatches.push(...matchesWithPredictions);
+        }
+      } catch (e) {
+        console.error(`Error getting predicted matches for matchday ${md}:`, e);
+      }
+    }
+    
+    return allMatches;
+  }, []);
+
+  const calculateTeamForms = useCallback((standingsData: Standing[], completedMatches: Match[], predictions?: Map<number, Prediction>) => {
+    const forms = new Map<number, ('W' | 'D' | 'L')[]>();
+    
+    standingsData.forEach(standing => {
+      const teamId = standing.team.id;
+      
+      // Get all matches for this team (both real and predicted)
+      const teamMatches = completedMatches
+        .filter(match => match.homeTeam.id === teamId || match.awayTeam.id === teamId)
+        .sort((a, b) => {
+          // Sort by matchday first, then by date
+          const matchdayA = a.matchday ?? 0;
+          const matchdayB = b.matchday ?? 0;
+          if (matchdayA !== matchdayB) {
+            return matchdayB - matchdayA; // Higher matchday first
+          }
+          return new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime();
+        })
+        .slice(0, 5); // Take last 5 results
+      
+      const form: ('W' | 'D' | 'L')[] = teamMatches.map(match => {
+        // Priority: Use actual scores if match is finished and has scores
+        if (match.status === 'FINISHED' && 
+            match.score?.fullTime?.home !== null && 
+            match.score?.fullTime?.away !== null &&
+            match.score?.fullTime) {
+          const isHome = match.homeTeam.id === teamId;
+          const homeScore = match.score.fullTime.home ?? 0;
+          const awayScore = match.score.fullTime.away ?? 0;
+          
+          if (isHome) {
+            if (homeScore > awayScore) return 'W';
+            if (homeScore < awayScore) return 'L';
+            return 'D';
+          } else {
+            if (awayScore > homeScore) return 'W';
+            if (awayScore < homeScore) return 'L';
+            return 'D';
+          }
+        }
+        
+        // Fallback: Use prediction if available (for predicted matches)
+        if (predictions && predictions.has(match.id)) {
+          const prediction = predictions.get(match.id);
+          if (prediction) {
+            return getPredictionResult(prediction, teamId, match) || 'D';
+          }
+        }
+        
+        // Final fallback: draw if no score and no prediction
+        return 'D';
+      });
+      
+      forms.set(teamId, form);
+    });
+    
+    return forms;
+  }, [getPredictionResult]);
+
   // Convert fetchData to useCallback to fix the dependency warning
   const fetchData = useCallback(async () => {
+    // Prevent duplicate concurrent fetches
+    if (!selectedLeague) {
+      return;
+    }
+    
+    if (fetchingDataRef.current === selectedLeague) {
+      // Already fetching for this league, skip
+      return;
+    }
+    
+    fetchingDataRef.current = selectedLeague;
     setLoading(true);
     setError(null);
     
@@ -363,6 +499,7 @@ export default function Home() {
     const timeoutId = setTimeout(() => {
       setError('Request timed out. API may be rate limited. Please try again later.');
       setLoading(false);
+      fetchingDataRef.current = null;
     }, 15000); // 15 seconds timeout
     
     try {
@@ -370,16 +507,21 @@ export default function Home() {
       if (!selectedLeague) {
         console.error("League not selected");
         clearTimeout(timeoutId);
+        fetchingDataRef.current = null;
         return;
       }
 
       // Try to use cached data first
       const combinedCacheKey = selectedLeague;
       
+      let standingsData: Standing[];
+      let currentMatchdayData: number;
+      let completedMatches: Match[] = [];
+      
       if (standingsCache.current.has(combinedCacheKey) && matchdayCache.current.has(combinedCacheKey)) {
         // If both standings and current matchday are already cached, use them
-        const standingsData = standingsCache.current.get(combinedCacheKey)!;
-        const currentMatchdayData = matchdayCache.current.get(combinedCacheKey)!;
+        standingsData = standingsCache.current.get(combinedCacheKey)!;
+        currentMatchdayData = matchdayCache.current.get(combinedCacheKey)!;
         
         setStandings(standingsData);
         if (predictedStandings.length === 0) {
@@ -390,9 +532,15 @@ export default function Home() {
         // Otherwise, use the combined endpoint to fetch both at once
         try {
           // Use the combined endpoint to get both standings and current matchday
-          const { standings: standingsData, currentMatchday: currentMatchdayData } = 
-            await getLeagueData(selectedLeague);
-            
+          const leagueDataPromise = getLeagueData(selectedLeague);
+          
+          // Start fetching completed matches in parallel (we'll need matchday, but start early)
+          // We'll get the matchday from leagueData, then fetch matches
+          const { standings: fetchedStandings, currentMatchday: fetchedMatchday } = await leagueDataPromise;
+          
+          standingsData = fetchedStandings;
+          currentMatchdayData = fetchedMatchday;
+          
           // Cache the results
           standingsCache.current.set(combinedCacheKey, standingsData);
           matchdayCache.current.set(combinedCacheKey, currentMatchdayData);
@@ -432,10 +580,13 @@ export default function Home() {
           }
           
           // Run both requests in parallel
-          const [standingsData, currentMatchdayData] = await Promise.all([
+          const [fetchedStandings, fetchedMatchday] = await Promise.all([
             standingsPromise,
             currentMatchdayPromise
           ]);
+          
+          standingsData = fetchedStandings;
+          currentMatchdayData = fetchedMatchday;
           
           // Cache the results
           standingsCache.current.set(combinedCacheKey, standingsData);
@@ -447,6 +598,77 @@ export default function Home() {
           }
           clearTimeout(timeoutId);
         }
+      }
+      
+      // Determine which matchday to use for forms
+      // If viewing historical matchday, use that; otherwise use current matchday
+      const targetMatchday = selectedHistoricalMatchday || currentMatchdayData;
+      
+      // fetchData only handles regular mode (not forecast mode)
+      // Forecast mode is handled by the separate useEffect
+      const formsCacheKey = `${selectedLeague}_${targetMatchday}_actual`;
+      const cachedForms = teamFormsCache.get(formsCacheKey);
+      
+      if (cachedForms) {
+        // Use cached forms immediately
+        setTeamForms(cachedForms);
+        setFormsLoading(false);
+      } else {
+        // Check if we're already fetching forms for this league/matchday
+        if (fetchingFormsRef.current.get(formsCacheKey)) {
+          // Already fetching, don't start another request
+          return;
+        }
+        
+        // First, try to use allCompletedMatchesCache (no API call needed!)
+        const allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
+        
+        if (allCompletedMatches && allCompletedMatches.length > 0) {
+          // Filter matches up to target matchday (historical or current)
+          const completedMatchesUpToMatchday = allCompletedMatches.filter(
+            (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
+          );
+          
+          // Calculate forms from cached matches (no API call!)
+          const forms = calculateTeamForms(standingsData, completedMatchesUpToMatchday);
+          teamFormsCache.set(formsCacheKey, forms);
+          setTeamForms(forms);
+          setFormsLoading(false);
+          return;
+        }
+        
+        // Only fetch from API if we don't have cached matches
+        // Mark as fetching
+        fetchingFormsRef.current.set(formsCacheKey, true);
+        setFormsLoading(true);
+        
+        // Fetch completed matches for forms (in parallel, non-blocking)
+        // Don't await - let it run in background, but also don't block the UI
+        getCompletedMatchesUpToMatchday(selectedLeague, targetMatchday)
+          .then(completedMatches => {
+            // Cache the completed matches for future use
+            allCompletedMatchesCache.current.set(selectedLeague, completedMatches);
+            
+            const forms = calculateTeamForms(standingsData, completedMatches);
+            teamFormsCache.set(formsCacheKey, forms);
+            setTeamForms(forms);
+            setFormsLoading(false);
+            fetchingFormsRef.current.delete(formsCacheKey);
+          })
+          .catch(error => {
+            console.error('Error fetching team forms:', error);
+            setFormsLoading(false);
+            fetchingFormsRef.current.delete(formsCacheKey);
+            // Try fallback from previous matchdays
+            for (let md = targetMatchday - 1; md >= 1; md--) {
+              const fallbackKey = `${selectedLeague}_${md}_actual`;
+              const fallbackForms = teamFormsCache.get(fallbackKey);
+              if (fallbackForms) {
+                setTeamForms(fallbackForms);
+                break;
+              }
+            }
+          });
       }
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -466,8 +688,9 @@ export default function Home() {
       }
     } finally {
       setLoading(false);
+      fetchingDataRef.current = null;
     }
-  }, [selectedLeague, predictedStandings.length, setCurrentMatchday]);
+  }, [selectedLeague, predictedStandings.length, setCurrentMatchday, calculateTeamForms]);
 
   useEffect(() => {
     if (!selectedLeague) return;
@@ -476,9 +699,186 @@ export default function Home() {
     setSelectedHistoricalMatchday(null);
     setHistoricalStandings([]);
     setIsDropdownOpen(false);
+    setTeamForms(new Map());
+    setFormsLoading(false);
+    // Clear form fetching refs when league changes
+    fetchingFormsRef.current.clear();
     
     fetchData();
   }, [selectedLeague, fetchData]);
+  
+  // Fetch forms when historical matchday changes or when viewing historical standings
+  useEffect(() => {
+    if (!selectedLeague || !standings.length) return;
+    
+    // Determine target matchday for forms
+    // Priority: selectedHistoricalMatchday > viewingFromMatchday > currentMatchday
+    let targetMatchday: number | null = null;
+    let isForecastMode = false;
+    
+    if (selectedHistoricalMatchday) {
+      // If viewing a historical matchday, use that
+      targetMatchday = selectedHistoricalMatchday;
+      // Check if we're in forecast mode (viewing predicted standings)
+      isForecastMode = viewingFromMatchday !== null && predictedStandingsByMatchday.has(selectedHistoricalMatchday);
+    } else if (viewingFromMatchday !== null) {
+      // If in forecast mode, use viewingFromMatchday
+      targetMatchday = viewingFromMatchday;
+      isForecastMode = true;
+    } else {
+      // Otherwise use current matchday
+      targetMatchday = currentMatchday;
+      isForecastMode = false;
+    }
+    
+    if (!targetMatchday) return;
+    
+    const formsCacheKey = `${selectedLeague}_${targetMatchday}_${isForecastMode ? 'forecast' : 'actual'}`;
+    const cachedForms = teamFormsCache.get(formsCacheKey);
+    
+    if (cachedForms) {
+      setTeamForms(cachedForms);
+      setFormsLoading(false);
+      return;
+    }
+    
+    // Check if already fetching
+    if (fetchingFormsRef.current.get(formsCacheKey)) {
+      return;
+    }
+    
+    // Forecast mode: combine real completed matches with predicted matches
+    if (isForecastMode) {
+      fetchingFormsRef.current.set(formsCacheKey, true);
+      setFormsLoading(true);
+      
+      // Helper function to calculate forecast forms with both real and predicted matches
+      const calculateForecastForms = (realMatches: Match[]) => {
+        try {
+          // Get predicted matches up to target matchday
+          const predictedMatches = getPredictedMatchesUpToMatchday(selectedLeague, targetMatchday);
+          
+          // Get predictions from localStorage
+          const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${selectedLeague}`) || '{}');
+          const predictionsMap = new Map<number, Prediction>();
+          Object.keys(savedPredictions).forEach(matchId => {
+            predictionsMap.set(Number(matchId), savedPredictions[matchId]);
+          });
+          
+          // Combine real completed matches with predicted matches
+          // Real matches are up to currentMatchday, predicted matches are from currentMatchday+1 to targetMatchday
+          const allMatches = [
+            ...realMatches, // Real completed matches up to current matchday
+            ...predictedMatches // Predicted matches from current matchday + 1 to target matchday
+          ].filter(
+            (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
+          );
+          
+          // Calculate forms from combined matches
+          // calculateTeamForms will use actual scores for real matches and predictions for predicted matches
+          const forms = calculateTeamForms(standings, allMatches, predictionsMap);
+          teamFormsCache.set(formsCacheKey, forms);
+          setTeamForms(forms);
+          setFormsLoading(false);
+          fetchingFormsRef.current.delete(formsCacheKey);
+        } catch (error) {
+          console.error('Error calculating predicted team forms:', error);
+          setFormsLoading(false);
+          fetchingFormsRef.current.delete(formsCacheKey);
+        }
+      };
+      
+      // Get real completed matches up to current matchday
+      const maxRealMatchday = Math.min(targetMatchday, currentMatchday);
+      const allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
+      
+      if (allCompletedMatches && allCompletedMatches.length > 0) {
+        // Filter real completed matches up to current matchday (only finished matches with scores)
+        const realMatches = allCompletedMatches.filter(
+          (match: Match) => 
+            match.matchday !== undefined && 
+            match.matchday <= maxRealMatchday &&
+            match.status === 'FINISHED' &&
+            match.score?.fullTime?.home !== null &&
+            match.score?.fullTime?.away !== null
+        );
+        
+        // Calculate forms with real + predicted matches
+        calculateForecastForms(realMatches);
+      } else {
+        // If not in cache, fetch completed matches up to current matchday
+        getCompletedMatchesUpToMatchday(selectedLeague, maxRealMatchday)
+          .then(fetchedMatches => {
+            // Cache all completed matches for future use
+            allCompletedMatchesCache.current.set(selectedLeague, fetchedMatches);
+            
+            // Filter only finished matches with scores
+            const realMatches = fetchedMatches.filter(
+              (match: Match) => 
+                match.status === 'FINISHED' &&
+                match.score?.fullTime?.home !== null &&
+                match.score?.fullTime?.away !== null
+            );
+            
+            // Calculate forms with real + predicted matches
+            calculateForecastForms(realMatches);
+          })
+          .catch(error => {
+            console.error('Error fetching completed matches for forms:', error);
+            // Continue with form calculation even if fetch fails (empty real matches)
+            calculateForecastForms([]);
+          });
+      }
+      return;
+    }
+    
+    // Regular mode: use completed matches
+    // Try to use allCompletedMatchesCache first (no API call!)
+    const allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
+    
+    if (allCompletedMatches && allCompletedMatches.length > 0) {
+      // Filter matches up to target matchday (e.g., if viewing MD 7, only use matches from MD 1-7)
+      const completedMatchesUpToMatchday = allCompletedMatches.filter(
+        (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
+      );
+      
+      // Calculate forms from cached matches (no API call!)
+      const forms = calculateTeamForms(standings, completedMatchesUpToMatchday);
+      teamFormsCache.set(formsCacheKey, forms);
+      setTeamForms(forms);
+      setFormsLoading(false);
+      return;
+    }
+    
+    // Fetch from API if needed
+    fetchingFormsRef.current.set(formsCacheKey, true);
+    setFormsLoading(true);
+    
+    getCompletedMatchesUpToMatchday(selectedLeague, targetMatchday)
+      .then(completedMatches => {
+        // Cache all completed matches for future use
+        allCompletedMatchesCache.current.set(selectedLeague, completedMatches);
+        const forms = calculateTeamForms(standings, completedMatches);
+        teamFormsCache.set(formsCacheKey, forms);
+        setTeamForms(forms);
+        setFormsLoading(false);
+        fetchingFormsRef.current.delete(formsCacheKey);
+      })
+      .catch(error => {
+        console.error('Error fetching team forms for historical matchday:', error);
+        setFormsLoading(false);
+        fetchingFormsRef.current.delete(formsCacheKey);
+        // Try fallback from previous matchdays
+        for (let md = targetMatchday - 1; md >= 1; md--) {
+          const fallbackKey = `${selectedLeague}_${md}_actual`;
+          const fallbackForms = teamFormsCache.get(fallbackKey);
+          if (fallbackForms) {
+            setTeamForms(fallbackForms);
+            break;
+          }
+        }
+      });
+  }, [selectedLeague, standings, currentMatchday, selectedHistoricalMatchday, viewingFromMatchday, predictedStandingsByMatchday, calculateTeamForms, getPredictedMatchesUpToMatchday]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1719,6 +2119,8 @@ export default function Home() {
               
               return (
             <StandingsTable 
+              teamForms={teamForms}
+              formsLoading={formsLoading}
               standings={(() => {
                 if (loadingHistorical) return standings;
                 
