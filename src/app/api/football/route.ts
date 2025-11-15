@@ -8,25 +8,35 @@ export async function GET(request: Request) {
   const combined = searchParams.get('combined');
   const leagueCode = searchParams.get('leagueCode');
 
-  if (!leagueCode) {
-    return NextResponse.json({ error: 'leagueCode is required' }, { status: 400 });
-  }
-
   try {
+    // Handle all leagues request (no leagueCode needed)
+    if (combined === 'all_leagues') {
+      console.log(`🔍 API Request: all_leagues`);
+      const allLeaguesData = await footballDataManager.getAllLeaguesData();
+      return NextResponse.json({
+        leagues: allLeaguesData,
+        success: true
+      });
+    }
+
+    if (!leagueCode) {
+      return NextResponse.json({ error: 'leagueCode is required' }, { status: 400 });
+    }
+
     console.log(`🔍 API Request: ${endpoint || combined} for ${leagueCode}`);
     
     // Handle combined data requests (most common)
     if (combined === 'league_data') {
-      const [standings, currentMatchday] = await Promise.all([
-        footballDataManager.getStandings(leagueCode),
-        footballDataManager.getCurrentMatchday(leagueCode)
-      ]);
+      // Use getLeagueData once instead of calling getStandings and getCurrentMatchday separately
+      // This prevents duplicate API calls since both methods call getLeagueData internally
+      const leagueData = await footballDataManager.getLeagueData(leagueCode);
       
       return NextResponse.json({
-        standings,
-        currentMatchday,
+        standings: leagueData.standings,
+        currentMatchday: leagueData.currentMatchday,
+        matches: leagueData.matches, // Include matches so frontend can use them
         success: true,
-        source: 'upstash_redis_cache'
+        source: leagueData.source === 'cache' ? 'upstash_redis_cache' : 'api'
       });
     }
 
@@ -48,34 +58,80 @@ export async function GET(request: Request) {
         
         if (getAllMatchesForLeague) {
           // Fetch all matches for the league at once (more efficient)
-          const matches = await footballDataManager.getAllMatches(leagueCode);
-          return NextResponse.json({ 
-            matches,
-            source: 'api'
-          });
+          try {
+            const matches = await footballDataManager.getAllMatches(leagueCode);
+            return NextResponse.json({ 
+              matches,
+              source: 'api'
+            });
+          } catch (error: any) {
+            // Handle 429 rate limit errors gracefully
+            if (error.response?.status === 429 || error.message?.includes('rate limit')) {
+              console.error(`❌ Rate limit error fetching all matches for ${leagueCode}`);
+              return NextResponse.json(
+                { 
+                  error: 'rate_limited', 
+                  message: 'Too many requests to football-data. Try again later.',
+                  matches: [] // Return empty array so frontend can handle gracefully
+                },
+                { status: 429 }
+              );
+            }
+            throw error;
+          }
         } else if (getAllMatches && matchdayNum) {
           // Fetch all matches (including completed) for the matchday
-          const matches = await footballDataManager.getAllMatchesForMatchday(leagueCode, matchdayNum);
-          return NextResponse.json({ 
-            matches,
-            source: 'api'
-          });
+          try {
+            const matches = await footballDataManager.getAllMatchesForMatchday(leagueCode, matchdayNum);
+            return NextResponse.json({ 
+              matches,
+              source: 'api'
+            });
+          } catch (error: any) {
+            // Handle 429 rate limit errors gracefully
+            if (error.response?.status === 429 || error.message?.includes('rate limit')) {
+              console.error(`❌ Rate limit error fetching matches for ${leagueCode} matchday ${matchdayNum}`);
+              return NextResponse.json(
+                { 
+                  error: 'rate_limited', 
+                  message: 'Too many requests to football-data. Try again later.',
+                  matches: []
+                },
+                { status: 429 }
+              );
+            }
+            throw error;
+          }
         } else {
           // Use the regular method (upcoming matches only)
-        const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
-        return NextResponse.json({ 
-          matches,
-          source: 'upstash_redis_cache'
-        });
+          const matches = await footballDataManager.getMatches(leagueCode, matchdayNum);
+          return NextResponse.json({ 
+            matches,
+            source: 'upstash_redis_cache'
+          });
         }
       }
     }
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     
-  } catch (error: unknown) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const statusCode = error.response?.status || error.status || 500;
+    
     console.error('❌ API Error:', errorMessage);
+    
+    // Handle 429 rate limit errors gracefully
+    if (statusCode === 429 || errorMessage.includes('rate limit') || errorMessage.includes('request limit')) {
+      return NextResponse.json(
+        { 
+          error: 'rate_limited', 
+          message: 'Too many requests to football-data. Try again later.',
+          details: error.response?.data?.message || errorMessage
+        },
+        { status: 429 }
+      );
+    }
     
     // Return more specific error messages
     if (errorMessage.includes('API_KEY')) {
@@ -85,20 +141,13 @@ export async function GET(request: Request) {
       );
     }
     
-    if (errorMessage.includes('rate limit')) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded', details: 'Please try again later' },
-        { status: 429 }
-      );
-    }
-    
     return NextResponse.json(
       { 
         error: 'Failed to fetch data',
         details: errorMessage,
         source: 'upstash_redis_cache'
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 } 

@@ -435,6 +435,60 @@ export const getLeagueData = async (leagueCode: string): Promise<{ standings: St
   });
 };
 
+// Function to get all leagues data in a single request
+export const getAllLeaguesData = async (): Promise<Record<string, { standings: Standing[], currentMatchday: number, matches: Match[] }>> => {
+  return queueRequest(async () => {
+    const response = await api.get('', {
+      params: {
+        combined: 'all_leagues'
+      }
+    });
+    
+    // Apply team name mappings to all standings and matches
+    const mappedLeagues: Record<string, { standings: Standing[], currentMatchday: number, matches: Match[] }> = {};
+    
+    Object.entries(response.data.leagues).forEach(([leagueCode, leagueData]: [string, any]) => {
+      if (leagueData.error) {
+        // Skip leagues with errors
+        return;
+      }
+      
+      const mappedStandings = leagueData.standings.map((standing: Standing) => {
+        return {
+          ...standing,
+          team: {
+            ...standing.team,
+            name: TEAM_NAME_MAPPING[standing.team.name] || standing.team.name
+          }
+        };
+      });
+      
+      // Apply team name mappings to matches as well
+      const mappedMatches = (leagueData.matches || []).map((match: Match) => {
+        return {
+          ...match,
+          homeTeam: {
+            ...match.homeTeam,
+            name: TEAM_NAME_MAPPING[match.homeTeam.name] || match.homeTeam.name
+          },
+          awayTeam: {
+            ...match.awayTeam,
+            name: TEAM_NAME_MAPPING[match.awayTeam.name] || match.awayTeam.name
+          }
+        };
+      });
+      
+      mappedLeagues[leagueCode] = {
+        standings: mappedStandings,
+        currentMatchday: leagueData.currentMatchday,
+        matches: mappedMatches
+      };
+    });
+    
+    return mappedLeagues;
+  });
+};
+
 // Function to get all matches (including completed) for a specific matchday
 export const getAllMatchesForMatchday = async (leagueCode: string, matchday: number): Promise<Match[]> => {
   return queueRequest(async () => {
@@ -478,6 +532,12 @@ export const getCompletedMatchesUpToMatchday = async (leagueCode: string, upToMa
         }
       });
       
+      // Handle rate limit errors gracefully
+      if (response.data.error === 'rate_limited') {
+        console.warn(`Rate limited when fetching completed matches for ${leagueCode}. Returning empty array.`);
+        return []; // Return empty array so forms can still work with cached/localStorage data
+      }
+      
       // Filter for completed matches up to the target matchday
       const allMatches = response.data.matches
         .filter((m: Match) => 
@@ -501,7 +561,12 @@ export const getCompletedMatchesUpToMatchday = async (leagueCode: string, upToMa
         });
       
       return allMatches;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle 429 rate limit errors gracefully
+      if (error.response?.status === 429 || error.response?.data?.error === 'rate_limited') {
+        console.warn(`Rate limited when fetching completed matches for ${leagueCode}. Returning empty array.`);
+        return []; // Return empty array so forms can still work with cached/localStorage data
+      }
       console.error('Error fetching completed matches:', error);
       throw error;
     }
