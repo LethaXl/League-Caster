@@ -118,8 +118,8 @@ function PositionChangeIndicator({ change, size = 'default' }: { change: number 
   const isPositive = change > 0;
   const color = isPositive ? 'text-green-400' : 'text-red-400';
   const arrow = isPositive ? '↑' : '↓';
-  const fontSize = size === 'small' ? 'text-[11px]' : 'text-sm';
-  const marginLeft = size === 'small' ? 'ml-1' : 'ml-2';
+  const fontSize = size === 'small' ? 'text-[9px]' : 'text-sm';
+  const marginLeft = size === 'small' ? 'ml-0.5' : 'ml-2';
 
   return (
     <span className={`${color} ${fontSize} ${marginLeft} font-bold`} style={{ lineHeight: 1 }}>
@@ -798,9 +798,16 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   };
 
   return (
-    <div className={`rounded-lg w-full ${isMobile ? 'overflow-x-auto' : 'overflow-x-visible'} ${isMobile ? 'px-0' : 'px-2'}`}>
+    <div className={`rounded-lg w-full max-w-full box-border ${isMobile ? 'overflow-x-auto' : 'overflow-x-hidden'} ${isMobile ? 'px-0' : 'px-2'}`}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (min-width: 359px) {
+          .form-header-text {
+            white-space: nowrap;
+          }
+        }
+      `}} />
       <div className={`transition-opacity duration-300 ease-in-out ${animating ? 'opacity-0' : 'opacity-100'}`}>
-        <table className={`w-full bg-transparent ${!isMobile ? 'table-fixed' : ''}`}>
+        <table className={`w-full max-w-full bg-transparent ${!isMobile ? 'table-fixed' : ''}`} style={{ tableLayout: !isMobile ? 'fixed' : 'auto' }}>
           <thead>
             <tr>
               <th className="w-16 text-center px-0 py-2 sm:py-3 text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50">
@@ -813,7 +820,9 @@ export default function StandingsTable({ standings, initialStandings, loading, l
               <th className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(5)}`}>L</th>
               <th className={`px-1 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(6)}`}>GD</th>
               <th className={`px-1 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(7)}`}>Pts</th>
-              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(8)}`}>Form →</th>
+              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(8)}`}>
+                <span className="form-header-text" style={{ display: 'inline-block' }}>Form →</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -882,13 +891,31 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                         const form = displayForms.get(standing.team.id) || [];
                         
                         // Always build exactly 5 slots - reverse form so most recent is on the right
+                        // This is the "full form" - we keep all 5 for calculations
                         const reversedForm = [...form].reverse();
-                        const slots = Array.from({ length: 5 }, (_, i) => reversedForm[i] ?? null);
+                        const fullSlots = Array.from({ length: 5 }, (_, i) => reversedForm[i] ?? null);
+                        
+                        // VISUAL ONLY: On mobile, show up to 4 form bubbles
+                        // If there are 4 or fewer results, show all of them (from the start)
+                        // If there are 5 results, show the last 4 (most recent)
+                        // On desktop, show all 5
+                        // This is purely a display decision - the full form data remains unchanged
+                        const visibleSlots = isMobile 
+                          ? (() => {
+                              // Count non-null results
+                              const resultCount = fullSlots.filter(slot => slot !== null).length;
+                              // If 4 or fewer results, show from the start (leftmost results)
+                              // If 5 results, show the last 4 (most recent)
+                              return resultCount <= 4 
+                                ? fullSlots.filter(slot => slot !== null).slice(0, 4)
+                                : fullSlots.slice(-4);
+                            })()
+                          : fullSlots; // All 5 on desktop
                         
                         // Unified loading condition for all bubbles
                         const isLoading = formsLoading || !formsReady;
                         
-                        return slots.map((result, index) => {
+                        return visibleSlots.map((result, index) => {
                           // Same loading check for all circles
                           const isLoadingBubble = isLoading || result === null;
                           
@@ -906,15 +933,15 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                           return (
                             <div
                               key={index}
-                              className={`rounded-full ${bgColor} flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold transition-opacity duration-300 ease-in-out`}
+                              className={`${isMobile ? '' : 'rounded-full'} ${bgColor} flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold transition-opacity duration-300 ease-in-out`}
                               style={{ 
-                                width: isMobile ? '1rem' : '1.25rem', 
-                                height: isMobile ? '1rem' : '1.25rem', 
-                                minWidth: isMobile ? '1rem' : '1.25rem', 
-                                minHeight: isMobile ? '1rem' : '1.25rem',
-                                maxWidth: isMobile ? '1rem' : '1.25rem',
-                                maxHeight: isMobile ? '1rem' : '1.25rem',
-                                borderRadius: '50%',
+                                width: isMobile ? '0.75rem' : '1.25rem', 
+                                height: isMobile ? '0.75rem' : '1.25rem', 
+                                minWidth: isMobile ? '0.75rem' : '1.25rem', 
+                                minHeight: isMobile ? '0.75rem' : '1.25rem',
+                                maxWidth: isMobile ? '0.75rem' : '1.25rem',
+                                maxHeight: isMobile ? '0.75rem' : '1.25rem',
+                                borderRadius: isMobile ? '0' : '50%', // Perfect squares on mobile, circles on desktop
                                 opacity: opacity
                               }}
                             >
