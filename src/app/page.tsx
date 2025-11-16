@@ -351,18 +351,16 @@ export default function Home() {
       return;
     }
     
-    // In forecast mode, only short-circuit to predicted standings for FUTURE matchdays
-    // For past/current matchdays (like MD1), we need to calculate historical standings from real matches
+    // In forecast mode, check for saved predicted standings first (for ALL matchdays)
+    // This is the saved state per matchday that was working before
     if (viewingFromMatchday !== null && matchday !== null) {
       const savedPredictedStandings = predictedStandingsByMatchday.get(Number(matchday));
-      const isFutureMd = matchday > currentMatchday;
-      
-      if (isFutureMd && savedPredictedStandings && savedPredictedStandings.length > 0) {
-        // For future MDs, we show predictions instead of calculating from real matches
-        setHistoricalStandings([]);
+      if (savedPredictedStandings && savedPredictedStandings.length > 0) {
+        // Use saved predicted standings instead of calculating from completed matches
+        setHistoricalStandings([]); // Clear historical standings since we're using predicted ones
         return;
       }
-      // For past/current matchdays, continue to calculate historical standings from completed matches
+      // If no saved predicted standings, continue to calculate historical standings from completed matches
     }
     
     // Check cache first for calculated standings
@@ -437,9 +435,14 @@ export default function Home() {
   // Check if we're at the final matchday for the current league
   // const isFinalMatchday = currentMatchday >= maxMatchday;
 
+  // Track previous isViewingStandings to detect when it changes from false to true
+  const prevIsViewingStandingsRef = useRef(false);
+  
   // Check for the current view state when isViewingStandings changes
   useEffect(() => {
-    if (isViewingStandings) {
+    // Only run when isViewingStandings changes from false to true (entering viewing mode)
+    // Don't clear selectedHistoricalMatchday if user is already viewing and selects a matchday
+    if (isViewingStandings && !prevIsViewingStandingsRef.current) {
       // Check if we're viewing current standings from predictions
       const viewingFromMatchdayStr = localStorage.getItem('viewingCurrentStandingsFrom');
       if (viewingFromMatchdayStr) {
@@ -453,15 +456,19 @@ export default function Home() {
         setViewingFromMatchday(forecastEndMd);
       }
       
-      // Clear selected historical matchday when viewing standings from predictions
+      // Clear selected historical matchday ONLY when first entering viewing standings mode
       // This ensures we show current predicted standings, not a previously viewed historical matchday
+      // But don't clear it if user is already viewing and selects a matchday
       setSelectedHistoricalMatchday(null);
       setHistoricalStandings([]);
       // Keep isComparing state when switching to viewing standings so indicators remain visible if checkbox was on
       
       setShowPredictions(false);
     }
-  }, [isViewingStandings, predictedStandingsByMatchday, selectedLeague, currentMatchday]);
+    
+    // Update ref to track current state
+    prevIsViewingStandingsRef.current = isViewingStandings;
+  }, [isViewingStandings, selectedLeague]);
 
   // Terminal statements when viewing final table after completing all matchdays
   useEffect(() => {
@@ -885,10 +892,13 @@ export default function Home() {
     setSelectedHistoricalMatchday(null);
     setHistoricalStandings([]);
     setIsDropdownOpen(false);
+    setViewingFromMatchday(null); // Reset viewing matchday when switching leagues
     setTeamForms(new Map());
     setFormsLoading(false);
     // Clear form fetching refs when league changes
     fetchingFormsRef.current.clear();
+    // Clear predicted standings map when switching leagues (since it's now shared across leagues)
+    setPredictedStandingsByMatchday(new Map());
     
     fetchData();
   }, [selectedLeague, fetchData]);
@@ -2294,6 +2304,8 @@ export default function Home() {
                 setViewingFromMatchday(null);
                 setSelectedHistoricalMatchday(null);
                 setHistoricalStandings([]);
+                // Clear predicted standings map when going back to league selection
+                setPredictedStandingsByMatchday(new Map());
                 // Reset race mode when returning to league selection
                 resetPredictions();
               }}
@@ -2651,36 +2663,94 @@ export default function Home() {
               standings={(() => {
                 if (loadingHistorical) return standings;
                 
-                // In forecast mode with selected historical matchday
-                // Use predicted standings ONLY for future matchdays
-                // Use historical standings (actual fixtures) for past/current matchdays
-                if (viewingFromMatchday !== null && selectedHistoricalMatchday !== null) {
-                  const isFutureMd = selectedHistoricalMatchday > currentMatchday;
-                  const savedStandings = predictedStandingsByMatchday.get(Number(selectedHistoricalMatchday));
-                  
-                  // For future matchdays, use predicted standings if we have them
-                  if (isFutureMd && savedStandings && savedStandings.length > 0) {
-                    return savedStandings.map(s => ({
-                      ...s,
-                      playedGames: selectedHistoricalMatchday,
-                      team: { ...s.team }
-                    }));
-                  }
-                  
-                  // For past (and current) matchdays, use real historical standings if available
-                  if (!isFutureMd && historicalStandings.length > 0) {
-                    return historicalStandings;
+                // ✅ PRIORITY 1: selectedHistoricalMatchday takes precedence (user explicitly selected a matchday)
+                if (selectedHistoricalMatchday !== null) {
+                  // In forecast mode (viewingFromMatchday !== null)
+                  if (viewingFromMatchday !== null) {
+                    // In forecast mode, ALWAYS check saved predicted standings first (regardless of past/future)
+                    // This is the saved state per matchday that was working before
+                    const savedStandings = predictedStandingsByMatchday.get(Number(selectedHistoricalMatchday));
+                    if (savedStandings && savedStandings.length > 0) {
+                      // In race mode mini table, filter to only selected teams
+                      if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                        const filtered = savedStandings.map(s => ({
+                          ...s,
+                          playedGames: selectedHistoricalMatchday,
+                          team: { ...s.team }
+                        })).filter(s => selectedTeamIds.includes(s.team.id));
+                        console.log(`[Race Mode] Filtered predicted standings (MD${selectedHistoricalMatchday}) from ${savedStandings.length} to ${filtered.length} teams`);
+                        return filtered;
+                      }
+                      return savedStandings.map(s => ({
+                        ...s,
+                        playedGames: selectedHistoricalMatchday,
+                        team: { ...s.team }
+                      }));
+                    }
+                    
+                    // If no saved predicted standings, check if it's a past matchday and use historical standings
+                    // Future in forecast mode means "inside or beyond the forecast window"
+                    const isFutureMd = selectedHistoricalMatchday >= viewingFromMatchday;
+                    if (!isFutureMd && historicalStandings.length > 0) {
+                      // Past/current matchday: use real historical standings
+                      if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                        const filtered = historicalStandings.filter(s => selectedTeamIds.includes(s.team.id));
+                        console.log(`[Race Mode] Filtered historical standings (MD${selectedHistoricalMatchday}) from ${historicalStandings.length} to ${filtered.length} teams`);
+                        return filtered;
+                      }
+                      return historicalStandings;
+                    }
+                    
+                    // Fallback: if no saved standings and no historical, use current predicted standings
+                    if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                      const filtered = predictedStandings.filter(s => selectedTeamIds.includes(s.team.id));
+                      console.log(`[Race Mode] Filtered predicted standings (fallback MD${selectedHistoricalMatchday}) from ${predictedStandings.length} to ${filtered.length} teams`);
+                      return filtered;
+                    }
+                    return predictedStandings;
+                  } else {
+                    // Regular mode (not in forecast): use historical standings
+                    if (historicalStandings.length > 0) {
+                      if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                        const filtered = historicalStandings.filter(s => selectedTeamIds.includes(s.team.id));
+                        console.log(`[Race Mode] Filtered historical standings (regular mode MD${selectedHistoricalMatchday}) from ${historicalStandings.length} to ${filtered.length} teams`);
+                        return filtered;
+                      }
+                      return historicalStandings;
+                    }
+                    // Fallback to current standings
+                    if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                      const filtered = standings.filter(s => selectedTeamIds.includes(s.team.id));
+                      console.log(`[Race Mode] Filtered standings (regular mode fallback) from ${standings.length} to ${filtered.length} teams`);
+                      return filtered;
+                    }
+                    return standings;
                   }
                 }
                 
-                // Regular historical standings (regular mode)
-                if (selectedHistoricalMatchday && historicalStandings.length > 0 && viewingFromMatchday === null) {
-                  return historicalStandings;
+                // ✅ PRIORITY 2: viewingFromMatchday (forecast mode, no specific matchday selected)
+                if (viewingFromMatchday !== null) {
+                  const savedStandings = predictedStandingsByMatchday.get(Number(viewingFromMatchday));
+                  if (savedStandings && savedStandings.length > 0) {
+                    // In race mode mini table, filter to only selected teams
+                    if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                      const filtered = savedStandings.filter(s => selectedTeamIds.includes(s.team.id));
+                      console.log(`[Race Mode] Filtered saved standings (MD${viewingFromMatchday}) from ${savedStandings.length} to ${filtered.length} teams`);
+                      return filtered;
+                    }
+                    return savedStandings;
+                  }
+                  // Fallback to current predicted standings
+                  if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+                    const filtered = predictedStandings.filter(s => selectedTeamIds.includes(s.team.id));
+                    console.log(`[Race Mode] Filtered predicted standings (fallback MD${viewingFromMatchday}) from ${predictedStandings.length} to ${filtered.length} teams`);
+                    return filtered;
+                  }
+                  return predictedStandings;
                 }
                 
-                // Default predicted or current standings
-                if (isViewingStandings && !viewingFromMatchday) {
-                  // In race mode mini table, filter to only selected teams
+                // ✅ PRIORITY 3: isViewingStandings (viewing predicted standings without specific matchday)
+                if (isViewingStandings) {
                   if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
                     const filtered = predictedStandings.filter(s => selectedTeamIds.includes(s.team.id));
                     console.log(`[Race Mode] Filtered predicted standings from ${predictedStandings.length} to ${filtered.length} teams`);
@@ -2688,28 +2758,8 @@ export default function Home() {
                   }
                   return predictedStandings;
                 }
-                if (viewingFromMatchday) {
-                  // Get the saved predicted standings for this matchday, or fall back to current predictedStandings
-                  // Normalize key to Number when reading from Map
-                  const savedStandings = predictedStandingsByMatchday.get(Number(viewingFromMatchday));
-                  if (savedStandings && savedStandings.length > 0) {
-                    // In race mode mini table, filter to only selected teams
-                    if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
-                      const filtered = savedStandings.filter(s => selectedTeamIds.includes(s.team.id));
-                      console.log(`[Race Mode] Filtered saved standings from ${savedStandings.length} to ${filtered.length} teams`);
-                      return filtered;
-                    }
-                    return savedStandings;
-                  }
-                  // In race mode mini table, filter to only selected teams
-                  if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
-                    const filtered = predictedStandings.filter(s => selectedTeamIds.includes(s.team.id));
-                    console.log(`[Race Mode] Filtered predicted standings (fallback) from ${predictedStandings.length} to ${filtered.length} teams`);
-                    return filtered;
-                  }
-                  return predictedStandings;
-                }
-                // In race mode mini table, filter to only selected teams
+                
+                // ✅ PRIORITY 4: Default to current real standings
                 if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
                   const filtered = standings.filter(s => selectedTeamIds.includes(s.team.id));
                   console.log(`[Race Mode] Filtered standings from ${standings.length} to ${filtered.length} teams`);
