@@ -996,6 +996,19 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
             }
             // For 'draws' mode, we already set it to 'draw' by default
             
+            // CRITICAL: Save the auto-determined result as a prediction so form calculation can use it
+            // This ensures form icons match the actual results used in standings
+            try {
+              const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${leagueCode}`) || '{}');
+              savedPredictions[match.id] = {
+                matchId: match.id,
+                type: resultType
+              };
+              localStorage.setItem(`predictions_${leagueCode}`, JSON.stringify(savedPredictions));
+            } catch (storageErr) {
+              console.error(`Error saving auto prediction for match ${match.id}:`, storageErr);
+            }
+            
             // Create prediction object
             const autoPrediction: Prediction = {
               matchId: match.id,

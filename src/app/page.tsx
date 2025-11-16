@@ -6,7 +6,7 @@ import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
 import ModeSelection from '@/components/Predictions/ModeSelection';
 import PredictionSummary from '@/components/Predictions/PredictionSummary';
-import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings, getAllLeaguesData } from '@/services/football-api';
+import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings, getAllLeaguesData, processMatchPrediction, updateStandings } from '@/services/football-api';
 import { Match } from '@/types/predictions';
 
 // Cache for team forms (shared with StandingsTable)
@@ -235,6 +235,7 @@ export default function Home() {
     setSelectedTeamIds,
     selectedTeamIds,
     isRaceMode,
+    unfilteredMatchesMode,
     setUnfilteredMatchesMode,
     setTableDisplayMode,
     tableDisplayMode
@@ -534,6 +535,12 @@ export default function Home() {
           isComparing,
           selectedHistoricalMatchday
         });
+        
+        // Clear forecast forms cache when viewing final table to ensure fresh forms
+        // This prevents showing old forms from previous predictions
+        if (selectedLeague) {
+          clearForecastFormsCache(selectedLeague);
+        }
       }
     }
   }, [isViewingStandings, viewingFromMatchday, predictedStandingsByMatchday, currentMatchday, selectedLeague, isComparing, selectedHistoricalMatchday]);
@@ -979,9 +986,10 @@ export default function Home() {
     const formsCacheKey = `${selectedLeague}_${targetMatchday}_${isForecastMode ? 'forecast' : 'actual'}`;
     const cachedForms = getCachedForms(formsCacheKey);
     
+    // Only reuse cache in regular (non forecast) mode
+    // In forecast mode we always recompute so forms stay in sync with new predictions
     // For MD1, always recalculate to ensure we have forms for all teams
-    // Don't use cached forms for MD1 to avoid incomplete form maps
-    if (cachedForms && targetMatchday !== 1) {
+    if (!isForecastMode && cachedForms && targetMatchday !== 1) {
       setTeamForms(cachedForms);
       setFormsLoading(false);
       return;
@@ -1015,6 +1023,24 @@ export default function Home() {
             predictionsMap.set(Number(matchId), savedPredictions[matchId]);
           });
           
+          // In race mode, we need ALL matches (including unselected teams' matches) for accurate form calculation
+          // Get all matches from localStorage, not just ones with predictions
+          let allStoredMatches: Match[] = [];
+          if (isRaceMode) {
+            for (let md = 1; md <= targetMatchday; md++) {
+              try {
+                const matchesKey = `${selectedLeague}_md${md}_all`;
+                const storedMatches = localStorage.getItem(matchesKey);
+                if (storedMatches) {
+                  const parsedMatches = JSON.parse(storedMatches) as Match[];
+                  allStoredMatches.push(...parsedMatches);
+                }
+              } catch (e) {
+                console.error(`Error getting all matches for matchday ${md}:`, e);
+              }
+            }
+          }
+          
           // Combine real completed matches with predicted matches
           // For forecast mode: prioritize predicted matches for matchdays in the forecast window
           // Real matches are for past matchdays (< viewingFromMatchday), predicted matches are for forecast matchdays (>= viewingFromMatchday)
@@ -1031,6 +1057,127 @@ export default function Home() {
             return !realMatchIds.has(match.id);
           });
           
+          // In race mode, also include all stored matches (for unselected teams) that aren't already included
+          let additionalMatches: Match[] = [];
+          if (isRaceMode && allStoredMatches.length > 0) {
+            const includedMatchIds = new Set([
+              ...realMatches.map(m => m.id),
+              ...filteredPredictedMatches.map(m => m.id)
+            ]);
+            
+            additionalMatches = allStoredMatches.filter(match => {
+              // Only include matches up to target matchday
+              if (match.matchday === undefined || match.matchday > targetMatchday) {
+                return false;
+              }
+              // Don't include if already in realMatches or predictedMatches
+              if (includedMatchIds.has(match.id)) {
+                return false;
+              }
+              // For forecast matchdays, include all matches (they may have been auto-processed)
+              if (viewingFromMatchday !== null && match.matchday !== undefined && match.matchday >= viewingFromMatchday) {
+                return true;
+              }
+              // For past matchdays, only include if not finished (to avoid duplicates with realMatches)
+              return match.status !== 'FINISHED' || !match.score?.fullTime;
+            });
+            
+            // For unselected teams' matches in forecast window, create temporary predictions based on standings
+            // CRITICAL: Process matches in matchday order, updating standings after each match (same as processUnfilteredMatches)
+            // This ensures we use the correct standings that include previous matches' results
+            if (isRaceMode && additionalMatches.length > 0) {
+              // Group matches by matchday and process in order
+              const matchesByMatchday = new Map<number, Match[]>();
+              additionalMatches.forEach(match => {
+                if (viewingFromMatchday !== null && match.matchday !== undefined && match.matchday >= viewingFromMatchday) {
+                  if (!matchesByMatchday.has(match.matchday)) {
+                    matchesByMatchday.set(match.matchday, []);
+                  }
+                  matchesByMatchday.get(match.matchday)!.push(match);
+                }
+              });
+              
+              // Process each matchday in order
+              const sortedMatchdays = Array.from(matchesByMatchday.keys()).sort((a, b) => a - b);
+              
+              for (const matchday of sortedMatchdays) {
+                const matchesForDay = matchesByMatchday.get(matchday)!;
+                
+                // Get initial standings for this matchday (from previous matchday)
+                let currentStandings: Standing[] | null = null;
+                if (matchday > 1) {
+                  currentStandings = predictedStandingsByMatchday.get(Number(matchday - 1)) || null;
+                }
+                
+                // If we don't have standings from previous matchday, try to work backwards
+                if (!currentStandings || currentStandings.length === 0) {
+                  for (let md = matchday - 1; md >= 1; md--) {
+                    const candidateStandings = predictedStandingsByMatchday.get(Number(md));
+                    if (candidateStandings && candidateStandings.length > 0) {
+                      currentStandings = candidateStandings;
+                      break;
+                    }
+                  }
+                }
+                
+                if (!currentStandings || currentStandings.length === 0) {
+                  console.warn(`[Forms] Cannot find standings for MD${matchday - 1}, skipping matches for MD${matchday}`);
+                  continue;
+                }
+                
+                // Process each match in this matchday, updating standings after each (same as processUnfilteredMatches)
+                for (const match of matchesForDay) {
+                  // Only create prediction if match doesn't already have one
+                  if (!predictionsMap.has(match.id)) {
+                    const homeTeamStanding = currentStandings.find(s => s.team.id === match.homeTeam.id);
+                    const awayTeamStanding = currentStandings.find(s => s.team.id === match.awayTeam.id);
+                    
+                    if (homeTeamStanding && awayTeamStanding) {
+                      let predictionType: 'home' | 'away' | 'draw' = 'draw';
+                      
+                      // Respect the unfilteredMatchesMode setting
+                      if (unfilteredMatchesMode === 'draws') {
+                        // All unfiltered matches end in draws
+                        predictionType = 'draw';
+                      } else {
+                        // Auto mode: ≤ 2-place gap → draw; larger gap → higher-placed (lower position number) wins
+                        // This MUST match the exact logic in determineAutomaticResult from PredictionForm.tsx
+                        const positionDiff = Math.abs(homeTeamStanding.position - awayTeamStanding.position);
+                        if (positionDiff <= 2) {
+                          // Close match (≤ 2 place difference) → draw
+                          predictionType = 'draw';
+                        } else {
+                          // Larger gap → higher-placed team (lower position number) wins
+                          predictionType = homeTeamStanding.position < awayTeamStanding.position ? 'home' : 'away';
+                        }
+                      }
+                      
+                      // Create temporary prediction for form calculation
+                      predictionsMap.set(match.id, {
+                        matchId: match.id,
+                        type: predictionType
+                      });
+                      
+                      // CRITICAL: Update currentStandings after processing this match (same as processUnfilteredMatches)
+                      // This ensures the next match in the same matchday uses updated standings
+                      const autoPrediction = {
+                        matchId: match.id,
+                        type: predictionType
+                      };
+                      const [homeResult, awayResult] = processMatchPrediction(
+                        autoPrediction,
+                        match.homeTeam.name,
+                        match.awayTeam.name
+                      );
+                      // Update standings for the next match in the same matchday
+                      currentStandings = updateStandings(homeResult, awayResult, currentStandings);
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
           const allMatches = [
             ...realMatches.filter(m => {
               // Exclude real matches that are in the forecast window and have predictions
@@ -1040,13 +1187,15 @@ export default function Home() {
               }
               return true; // Keep all real matches for past matchdays
             }),
-            ...filteredPredictedMatches
+            ...filteredPredictedMatches,
+            ...additionalMatches
           ].filter(
             (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
           );
           
           // Calculate forms from combined matches
           // calculateTeamForms will use actual scores for real matches and predictions for predicted matches
+          // For race mode, unselected teams' matches will use their stored results or be calculated from standings
           const forms = calculateTeamForms(standings, allMatches, predictionsMap);
           setCachedForms(formsCacheKey, forms);
           setTeamForms(forms);
@@ -1504,6 +1653,10 @@ export default function Home() {
     
     // Clear any saved prediction state for a clean start
     localStorage.removeItem('predictionState');
+    
+    // Clear forecast forms cache when starting new predictions
+    // This ensures old forms from previous predictions don't show up
+    clearForecastFormsCache(selectedLeague);
     
     setLoading(true);
     setError(null);
@@ -2695,6 +2848,11 @@ export default function Home() {
                           setSelectedHistoricalMatchday(null);
                           setHistoricalStandings([]);
                           setIsComparing(false);
+                          // Clear forecast forms cache when going back to predictions
+                          // This ensures fresh forms for new predictions
+                          if (selectedLeague) {
+                            clearForecastFormsCache(selectedLeague);
+                          }
                       }}
                         className="px-3 sm:px-4 text-xs sm:text-sm bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-[28px] sm:h-[36px] flex items-center justify-center"
                     >
