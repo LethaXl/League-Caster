@@ -89,6 +89,35 @@ const setCachedForms = (cacheKey: string, forms: Map<number, ('W' | 'D' | 'L')[]
     console.error('Error caching forms to localStorage:', e);
   }
 };
+
+// Function to clear all forecast forms cache for a league
+const clearForecastFormsCache = (leagueCode: string): void => {
+  // Clear from memory cache
+  const keysToDelete: string[] = [];
+  teamFormsCache.forEach((_, key) => {
+    if (key.startsWith(`${leagueCode}_`) && key.includes('_forecast')) {
+      keysToDelete.push(key);
+    }
+  });
+  keysToDelete.forEach(key => teamFormsCache.delete(key));
+  
+  // Clear from localStorage
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(`forms_cache_${leagueCode}_`) && key.includes('_forecast')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      console.log(`[Forms Cache] Cleared ${keysToRemove.length} forecast form cache entries for ${leagueCode}`);
+    } catch (e) {
+      console.error('Error clearing forecast forms cache:', e);
+    }
+  }
+};
 import { usePrediction } from '@/contexts/PredictionContext';
 import { Prediction } from '@/types/predictions';
 import Image from 'next/image';
@@ -469,6 +498,20 @@ export default function Home() {
     // Update ref to track current state
     prevIsViewingStandingsRef.current = isViewingStandings;
   }, [isViewingStandings, selectedLeague]);
+  
+  // Track previous viewingFromMatchday to detect when entering forecast mode
+  const prevViewingFromMatchdayRef = useRef<number | null>(null);
+  
+  // Clear forecast forms cache when entering forecast mode (viewingFromMatchday changes from null to a value)
+  // This ensures that when user makes new predictions, old cached forms are cleared
+  useEffect(() => {
+    // Only clear cache when first entering forecast mode (null -> value)
+    // Don't clear when just changing matchdays within forecast mode
+    if (viewingFromMatchday !== null && prevViewingFromMatchdayRef.current === null && selectedLeague) {
+      clearForecastFormsCache(selectedLeague);
+    }
+    prevViewingFromMatchdayRef.current = viewingFromMatchday;
+  }, [viewingFromMatchday, selectedLeague]);
 
   // Terminal statements when viewing final table after completing all matchdays
   useEffect(() => {
@@ -636,7 +679,16 @@ export default function Home() {
       }
       
       const form: ('W' | 'D' | 'L')[] = teamMatches.map(match => {
-        // Priority: Use actual scores if match is finished and has scores
+        // Priority 1: Use prediction if available (for predicted matches in forecast mode)
+        // This ensures predicted matches use predictions even if they're marked as FINISHED
+        if (predictions && predictions.has(match.id)) {
+          const prediction = predictions.get(match.id);
+          if (prediction) {
+            return getPredictionResult(prediction, teamId, match) || 'D';
+          }
+        }
+        
+        // Priority 2: Use actual scores if match is finished and has scores (for real matches without predictions)
         if (match.status === 'FINISHED' && 
             match.score?.fullTime?.home !== null && 
             match.score?.fullTime?.away !== null &&
@@ -653,14 +705,6 @@ export default function Home() {
             if (awayScore > homeScore) return 'W';
             if (awayScore < homeScore) return 'L';
             return 'D';
-          }
-        }
-        
-        // Fallback: Use prediction if available (for predicted matches)
-        if (predictions && predictions.has(match.id)) {
-          const prediction = predictions.get(match.id);
-          if (prediction) {
-            return getPredictionResult(prediction, teamId, match) || 'D';
           }
         }
         
@@ -900,6 +944,9 @@ export default function Home() {
     // Clear predicted standings map when switching leagues (since it's now shared across leagues)
     setPredictedStandingsByMatchday(new Map());
     
+    // Reset viewingFromMatchday ref when switching leagues
+    prevViewingFromMatchdayRef.current = null;
+    
     fetchData();
   }, [selectedLeague, fetchData]);
   
@@ -969,10 +1016,31 @@ export default function Home() {
           });
           
           // Combine real completed matches with predicted matches
-          // Real matches are up to currentMatchday, predicted matches are from currentMatchday+1 to targetMatchday
+          // For forecast mode: prioritize predicted matches for matchdays in the forecast window
+          // Real matches are for past matchdays (< viewingFromMatchday), predicted matches are for forecast matchdays (>= viewingFromMatchday)
+          const realMatchIds = new Set(realMatches.map(m => m.id));
+          
+          // Filter out predicted matches that are already in realMatches for past matchdays
+          // But keep predicted matches for forecast matchdays (>= viewingFromMatchday) even if they're finished
+          const filteredPredictedMatches = predictedMatches.filter(match => {
+            // If match is in forecast window (>= viewingFromMatchday), always use predicted version
+            if (viewingFromMatchday !== null && match.matchday !== undefined && match.matchday >= viewingFromMatchday) {
+              return true; // Always include predicted matches for forecast matchdays
+            }
+            // For past matchdays, only include if not already in realMatches
+            return !realMatchIds.has(match.id);
+          });
+          
           const allMatches = [
-            ...realMatches, // Real completed matches up to current matchday
-            ...predictedMatches // Predicted matches from current matchday + 1 to target matchday
+            ...realMatches.filter(m => {
+              // Exclude real matches that are in the forecast window and have predictions
+              // (we want to use predicted versions instead)
+              if (viewingFromMatchday !== null && m.matchday !== undefined && m.matchday >= viewingFromMatchday) {
+                return !predictionsMap.has(m.id); // Exclude if we have a prediction for it
+              }
+              return true; // Keep all real matches for past matchdays
+            }),
+            ...filteredPredictedMatches
           ].filter(
             (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
           );
