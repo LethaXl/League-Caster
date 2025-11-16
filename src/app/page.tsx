@@ -512,27 +512,36 @@ export default function Home() {
   }, []);
 
   // Helper function to get completed matches from localStorage (no API call)
-  const getCompletedMatchesFromLocalStorage = useCallback((leagueCode: string, upToMatchday: number): Match[] => {
+  // Gets ALL matches from localStorage (not just up to a matchday) to ensure we have complete data
+  const getCompletedMatchesFromLocalStorage = useCallback((leagueCode: string, upToMatchday?: number): Match[] => {
     const allMatches: Match[] = [];
     
-    // Get matches from localStorage for each matchday up to target
-    for (let md = 1; md <= upToMatchday; md++) {
+    // Try to get matches from localStorage for matchdays 1-50 (covers most leagues)
+    // If upToMatchday is provided, we could limit, but it's safer to get all and filter later
+    const maxMatchday = upToMatchday || 50;
+    
+    for (let md = 1; md <= maxMatchday; md++) {
       try {
         const matchesKey = `${leagueCode}_md${md}_all`;
         const storedMatches = localStorage.getItem(matchesKey);
         
         if (storedMatches) {
           const parsedMatches = JSON.parse(storedMatches) as Match[];
-          // Only include finished matches with scores
-          const completedMatches = parsedMatches.filter(match => 
-            match.status === 'FINISHED' &&
-            match.score?.fullTime?.home !== null &&
-            match.score?.fullTime?.away !== null
-          );
+          // Only include finished matches with scores AND valid matchday
+          const completedMatches = parsedMatches.filter(match => {
+            // Must have matchday set
+            if (match.matchday === undefined || match.matchday === null) {
+              return false;
+            }
+            // Must be finished with scores
+            return match.status === 'FINISHED' &&
+              match.score?.fullTime?.home !== null &&
+              match.score?.fullTime?.away !== null;
+          });
           allMatches.push(...completedMatches);
         }
       } catch (e) {
-        console.error(`Error getting completed matches from localStorage for matchday ${md}:`, e);
+        // Silently continue - some matchdays might not exist in localStorage
       }
     }
     
@@ -572,19 +581,43 @@ export default function Home() {
     standingsData.forEach(standing => {
       const teamId = standing.team.id;
       
-      // Get all matches for this team (both real and predicted)
+      // Get all matches for this team
+      // IMPORTANT: completedMatches should already be filtered for finished matches with scores,
+      // but we double-check here to ensure we only use valid matches
       const teamMatches = completedMatches
-        .filter(match => match.homeTeam.id === teamId || match.awayTeam.id === teamId)
+        .filter(match => {
+          // Only include matches for this team
+          const isTeamMatch = match.homeTeam.id === teamId || match.awayTeam.id === teamId;
+          
+          // For regular mode (no predictions), ensure match is finished with scores
+          if (!predictions || predictions.size === 0) {
+            return isTeamMatch &&
+              match.status === 'FINISHED' &&
+              match.score?.fullTime?.home !== null &&
+              match.score?.fullTime?.away !== null;
+          }
+          
+          // For forecast mode, include matches with predictions even if not finished
+          return isTeamMatch;
+        })
         .sort((a, b) => {
-          // Sort by matchday first, then by date
+          // Sort by matchday first (descending), then by date (descending)
+          // This ensures we get the most recent matches first
           const matchdayA = a.matchday ?? 0;
           const matchdayB = b.matchday ?? 0;
           if (matchdayA !== matchdayB) {
-            return matchdayB - matchdayA; // Higher matchday first
+            return matchdayB - matchdayA; // Higher matchday first (most recent)
           }
+          // If same matchday, sort by date (most recent first)
           return new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime();
         })
-        .slice(0, 5); // Take last 5 results
+        .slice(0, 5); // Take last 5 results (most recent)
+      
+      // Debug: Log if team has fewer matches than expected
+      if (process.env.NODE_ENV === 'development' && teamMatches.length < 5 && teamMatches.length > 0) {
+        const matchdays = teamMatches.map(m => m.matchday).join(', ');
+        console.log(`[Forms] ${standing.team.name}: Only ${teamMatches.length} matches found. Matchdays: [${matchdays}]`);
+      }
       
       const form: ('W' | 'D' | 'L')[] = teamMatches.map(match => {
         // Priority: Use actual scores if match is finished and has scores
@@ -862,10 +895,17 @@ export default function Home() {
     const formsCacheKey = `${selectedLeague}_${targetMatchday}_${isForecastMode ? 'forecast' : 'actual'}`;
     const cachedForms = getCachedForms(formsCacheKey);
     
-    if (cachedForms) {
+    // For MD1, always recalculate to ensure we have forms for all teams
+    // Don't use cached forms for MD1 to avoid incomplete form maps
+    if (cachedForms && targetMatchday !== 1) {
       setTeamForms(cachedForms);
       setFormsLoading(false);
       return;
+    }
+    
+    // Debug: Log when we're calculating forms for MD1
+    if (targetMatchday === 1) {
+      console.log(`[Forms] MD1: Calculating forms for ${selectedLeague} (bypassing cache)`);
     }
     
     // Check if already fetching
@@ -938,20 +978,23 @@ export default function Home() {
       
       if (allCompletedMatches && allCompletedMatches.length > 0) {
         // Filter real completed matches up to current matchday (only finished matches with scores)
+        // CRITICAL: Ensure we only use finished matches with valid scores
         const realMatches = allCompletedMatches.filter(
           (match: Match) => 
             match.matchday !== undefined && 
             match.matchday <= maxRealMatchday &&
             match.status === 'FINISHED' &&
             match.score?.fullTime?.home !== null &&
-            match.score?.fullTime?.away !== null
+            match.score?.fullTime?.away !== null &&
+            match.score?.fullTime // Ensure score object exists
         );
         
         // Calculate forms with real + predicted matches
         calculateForecastForms(realMatches);
       } else {
         // Try localStorage first (no API call!)
-        const localStorageMatches = getCompletedMatchesFromLocalStorage(selectedLeague, maxRealMatchday);
+        // Get all matches from localStorage, then filter by matchday later
+        const localStorageMatches = getCompletedMatchesFromLocalStorage(selectedLeague);
         
         if (localStorageMatches.length > 0) {
           // Cache the matches from localStorage
@@ -996,69 +1039,315 @@ export default function Home() {
     }
     
     // Regular mode: use completed matches
-    // Try to use allCompletedMatchesCache first (no API call!)
-    let allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
+    // Priority order:
+    // 1. Try localStorage first (most reliable - has all matchdays from previous sessions)
+    // 2. Try allMatchesCache (from all_leagues prefetch - might not have all historical matchdays)
+    // 3. Fallback to allCompletedMatchesCache
     
-    if (!allCompletedMatches) {
-      // Try to get from allMatchesCache (prefetched from all_leagues)
-      const cachedMatches = getCachedMatches(selectedLeague);
-      if (cachedMatches && cachedMatches.length > 0) {
-        // Filter for completed matches only
-        const completed = cachedMatches.filter(
-          (match: Match) =>
-            match.status === 'FINISHED' &&
-            match.score?.fullTime?.home !== null &&
-            match.score?.fullTime?.away !== null
+    // First, try localStorage (most complete source for historical matchdays)
+    // Get ALL matches from localStorage (not just up to targetMatchday) to ensure completeness
+    const localStorageMatches = getCompletedMatchesFromLocalStorage(selectedLeague);
+    let allCompletedMatches: Match[] = [];
+    
+    if (localStorageMatches.length > 0) {
+      // localStorage has matches - use it and cache for future use
+      allCompletedMatches = localStorageMatches;
+      allCompletedMatchesCache.current.set(selectedLeague, localStorageMatches);
+      
+      if (process.env.NODE_ENV === 'development') {
+        const matchdayCounts = new Map<number, number>();
+        localStorageMatches.forEach(m => {
+          const md = m.matchday || 0;
+          matchdayCounts.set(md, (matchdayCounts.get(md) || 0) + 1);
+        });
+        const matchdays = Array.from(matchdayCounts.keys()).sort((a, b) => a - b);
+        console.log(`[Forms] ${selectedLeague}: Loaded ${localStorageMatches.length} matches from localStorage. Matchdays: ${matchdays.join(', ')}`);
+      }
+    } else {
+      // localStorage doesn't have matches, try allMatchesCache
+      const cachedAllMatches = getCachedMatches(selectedLeague);
+      
+      if (cachedAllMatches && cachedAllMatches.length > 0) {
+        // Filter for completed matches only from the full match list
+        // IMPORTANT: Only include matches that are finished AND have valid scores AND have a matchday
+        allCompletedMatches = cachedAllMatches.filter(
+          (match: Match) => {
+            // Must have matchday set (critical for historical matchdays)
+            if (match.matchday === undefined || match.matchday === null) {
+              return false;
+            }
+            // Must be finished with scores
+            return match.status === 'FINISHED' &&
+              match.score?.fullTime?.home !== null &&
+              match.score?.fullTime?.away !== null;
+          }
         );
-        allCompletedMatches = completed;
-        // Cache for future use
-        allCompletedMatchesCache.current.set(selectedLeague, completed);
+        // Update cache for future use
+        allCompletedMatchesCache.current.set(selectedLeague, allCompletedMatches);
+        
+        // Debug: Log what we found
+        if (process.env.NODE_ENV === 'development') {
+          const matchdayCounts = new Map<number, number>();
+          allCompletedMatches.forEach(m => {
+            const md = m.matchday || 0;
+            matchdayCounts.set(md, (matchdayCounts.get(md) || 0) + 1);
+          });
+          const matchdays = Array.from(matchdayCounts.keys()).sort((a, b) => a - b);
+          console.log(`[Forms] ${selectedLeague}: Loaded ${allCompletedMatches.length} completed matches from allMatchesCache. Matchdays: ${matchdays.join(', ')}`);
+        }
+      } else {
+        // Fallback to allCompletedMatchesCache if allMatchesCache doesn't have data
+        allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague) || [];
       }
     }
     
-    if (allCompletedMatches && allCompletedMatches.length > 0) {
-      // Filter matches up to target matchday (e.g., if viewing MD 7, only use matches from MD 1-7)
+    // Special handling for MD1: ALWAYS run first, even if allCompletedMatches is empty
+    // This ensures MD1 forms work for all leagues
+    if (targetMatchday === 1) {
+      console.log(`[Forms] MD1: Processing MD1 forms for ${selectedLeague}`);
+      console.log(`[Forms] MD1: allCompletedMatches.length = ${allCompletedMatches.length}`);
+      
+      const md1Matches = allCompletedMatches.filter(m => 
+        m.matchday === 1 &&
+        m.status === 'FINISHED' &&
+        m.score?.fullTime?.home !== null &&
+        m.score?.fullTime?.away !== null
+      );
+
+      console.log(`[Forms] MD1: Found ${md1Matches.length} finished MD1 matches in allCompletedMatches`);
+
+      const manualForms = new Map<number, ('W' | 'D' | 'L')[]>();
+
+      standings.forEach(standing => {
+        const teamId = standing.team.id;
+
+        // Find this team's MD1 match if it exists
+        const teamMatch = md1Matches.find(m => 
+          m.homeTeam.id === teamId || m.awayTeam.id === teamId
+        );
+
+        if (teamMatch && teamMatch.score?.fullTime) {
+          const isHome = teamMatch.homeTeam.id === teamId;
+          const homeScore = teamMatch.score.fullTime.home ?? 0;
+          const awayScore = teamMatch.score.fullTime.away ?? 0;
+
+          let result: 'W' | 'D' | 'L';
+          if (isHome) {
+            if (homeScore > awayScore) result = 'W';
+            else if (homeScore < awayScore) result = 'L';
+            else result = 'D';
+          } else {
+            if (awayScore > homeScore) result = 'W';
+            else if (awayScore < homeScore) result = 'L';
+            else result = 'D';
+          }
+
+          manualForms.set(teamId, [result]);
+        } else {
+          // No MD1 game for this team
+          // Put an empty form array so StandingsTable does not think it is still loading
+          manualForms.set(teamId, []);
+        }
+      });
+
+      // Even if there were zero MD1 matches, we still set an empty forms map for all teams
+      console.log(`[Forms] MD1: Built forms for ${manualForms.size} teams (some may have empty form)`);
+      console.log(`[Forms] MD1: Setting teamForms and stopping loading`);
+
+      setCachedForms(formsCacheKey, manualForms);
+      setTeamForms(manualForms);
+      setFormsLoading(false);
+      return;
+    }
+    
+    // For other matchdays (MD2+), use normal calculation
+    if (allCompletedMatches.length > 0) {
+      // Filter matches up to target matchday AND ensure they're finished with scores
+      // This is critical for historical matchdays - we only want completed matches
+      // IMPORTANT: Don't filter by status/score again here since allCompletedMatches already has that
+      // Just filter by matchday to get matches up to the target matchday
       const completedMatchesUpToMatchday = allCompletedMatches.filter(
-        (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
+        (match: Match) => {
+          // Ensure matchday is valid and within range
+          const matchday = match.matchday;
+          if (matchday === undefined || matchday === null) {
+            return false; // Skip matches without matchday
+          }
+          return matchday <= targetMatchday;
+        }
       );
       
-      // Calculate forms from cached matches (no API call!)
-      const forms = calculateTeamForms(standings, completedMatchesUpToMatchday);
-      setCachedForms(formsCacheKey, forms);
-      setTeamForms(forms);
-      setFormsLoading(false);
-      return;
+      // Debug: Log match counts to help diagnose form issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Forms] ${selectedLeague} MD ${targetMatchday}: Found ${completedMatchesUpToMatchday.length} completed matches (from ${allCompletedMatches.length} total completed)`);
+        // Log matchday distribution
+        const matchdayCounts = new Map<number, number>();
+        completedMatchesUpToMatchday.forEach(m => {
+          const md = m.matchday || 0;
+          matchdayCounts.set(md, (matchdayCounts.get(md) || 0) + 1);
+        });
+        console.log(`[Forms] Matchday distribution:`, Object.fromEntries(matchdayCounts));
+      }
+      
+      // For other matchdays (MD2+), use normal calculation
+      // If we have matches for the target matchday, calculate forms
+      if (completedMatchesUpToMatchday.length > 0) {
+        // Calculate forms from cached matches (no API call!)
+        const forms = calculateTeamForms(standings, completedMatchesUpToMatchday);
+        
+        setCachedForms(formsCacheKey, forms);
+        setTeamForms(forms);
+        setFormsLoading(false);
+        return;
+      } else {
+        // We have matches in cache, but none for the target matchday
+        // This can happen if cache only has matches from later matchdays
+        // For MD1, try to manually calculate from MD1 matches in cache
+        if (targetMatchday === 1) {
+          const md1Matches = allCompletedMatches.filter(m => m.matchday === 1 && 
+            m.status === 'FINISHED' &&
+            m.score?.fullTime?.home !== null &&
+            m.score?.fullTime?.away !== null
+          );
+          
+          if (md1Matches.length > 0) {
+            console.log(`[Forms] MD1: Manually calculating forms from ${md1Matches.length} MD1 matches (from cache, no matches in filtered set)`);
+            const manualForms = new Map<number, ('W' | 'D' | 'L')[]>();
+            
+            standings.forEach(standing => {
+              const teamId = standing.team.id;
+              // Find this team's MD1 match
+              const teamMatch = md1Matches.find(m => 
+                m.homeTeam.id === teamId || m.awayTeam.id === teamId
+              );
+              
+              if (teamMatch && teamMatch.score?.fullTime) {
+                const isHome = teamMatch.homeTeam.id === teamId;
+                const homeScore = teamMatch.score.fullTime.home ?? 0;
+                const awayScore = teamMatch.score.fullTime.away ?? 0;
+                
+                let result: 'W' | 'D' | 'L';
+                if (isHome) {
+                  if (homeScore > awayScore) result = 'W';
+                  else if (homeScore < awayScore) result = 'L';
+                  else result = 'D';
+                } else {
+                  if (awayScore > homeScore) result = 'W';
+                  else if (awayScore < homeScore) result = 'L';
+                  else result = 'D';
+                }
+                
+                manualForms.set(teamId, [result]);
+              }
+            });
+            
+            if (manualForms.size > 0) {
+              console.log(`[Forms] MD1: Manually calculated forms for ${manualForms.size} teams (from cache)`);
+              setCachedForms(formsCacheKey, manualForms);
+              setTeamForms(manualForms);
+              setFormsLoading(false);
+              return;
+            }
+          }
+        }
+        
+        // Fall through to API fetch
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`[Forms] ${selectedLeague} MD ${targetMatchday}: Cache has ${allCompletedMatches.length} matches but none for matchday ${targetMatchday}. Fetching from API...`);
+        }
+      }
     }
     
-    // Try localStorage before making API call
-    const localStorageMatches = getCompletedMatchesFromLocalStorage(selectedLeague, targetMatchday);
+    // If we get here, either:
+    // 1. No matches in cache/localStorage at all, OR
+    // 2. Cache has matches but none for the target matchday
+    // Fetch from API as fallback
     
-    if (localStorageMatches.length > 0) {
-      // Cache the matches from localStorage
-      allCompletedMatchesCache.current.set(selectedLeague, localStorageMatches);
-      
-      // Filter matches up to target matchday
-      const completedMatchesUpToMatchday = localStorageMatches.filter(
-        (match: Match) => match.matchday !== undefined && match.matchday <= targetMatchday
-      );
-      
-      // Calculate forms from localStorage matches (no API call!)
-      const forms = calculateTeamForms(standings, completedMatchesUpToMatchday);
-      setCachedForms(formsCacheKey, forms);
-      setTeamForms(forms);
-      setFormsLoading(false);
-      return;
-    }
-    
-    // Only fetch from API as last resort (if no cache and no localStorage)
+    // Only fetch from API as last resort (if no cache and no localStorage, or cache doesn't have target matchday)
     fetchingFormsRef.current.set(formsCacheKey, true);
     setFormsLoading(true);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Forms] ${selectedLeague} MD ${targetMatchday}: Fetching from API (cache miss or no matches for target matchday)`);
+    }
     
     getCompletedMatchesUpToMatchday(selectedLeague, targetMatchday)
       .then(completedMatches => {
         // Cache all completed matches for future use
         allCompletedMatchesCache.current.set(selectedLeague, completedMatches);
-        const forms = calculateTeamForms(standings, completedMatches);
+        
+        // Ensure we only use finished matches with scores (API should return these, but double-check)
+        const validMatches = completedMatches.filter(
+          (match: Match) =>
+            match.status === 'FINISHED' &&
+            match.score?.fullTime?.home !== null &&
+            match.score?.fullTime?.away !== null &&
+            match.matchday !== undefined &&
+            match.matchday !== null &&
+            match.matchday <= targetMatchday
+        );
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[Forms] ${selectedLeague} MD ${targetMatchday}: Fetched ${completedMatches.length} matches from API, ${validMatches.length} valid for form calculation`);
+          if (targetMatchday === 1) {
+            const md1Matches = validMatches.filter(m => m.matchday === 1);
+            console.log(`[Forms] MD1: ${md1Matches.length} matches with matchday === 1 from API`);
+          }
+        }
+        
+        // Special handling for MD1: always build a complete forms map from API data
+        if (targetMatchday === 1) {
+          const md1Matches = validMatches.filter(m => 
+            m.matchday === 1 &&
+            m.status === 'FINISHED' &&
+            m.score?.fullTime?.home !== null &&
+            m.score?.fullTime?.away !== null
+          );
+
+          console.log(`[Forms] MD1: ${md1Matches.length} matches with matchday === 1 from API`);
+
+          const manualForms = new Map<number, ('W' | 'D' | 'L')[]>();
+
+          standings.forEach(standing => {
+            const teamId = standing.team.id;
+            const teamMatch = md1Matches.find(m => 
+              m.homeTeam.id === teamId || m.awayTeam.id === teamId
+            );
+
+            if (teamMatch && teamMatch.score?.fullTime) {
+              const isHome = teamMatch.homeTeam.id === teamId;
+              const homeScore = teamMatch.score.fullTime.home ?? 0;
+              const awayScore = teamMatch.score.fullTime.away ?? 0;
+
+              let result: 'W' | 'D' | 'L';
+              if (isHome) {
+                if (homeScore > awayScore) result = 'W';
+                else if (homeScore < awayScore) result = 'L';
+                else result = 'D';
+              } else {
+                if (awayScore > homeScore) result = 'W';
+                else if (awayScore < homeScore) result = 'L';
+                else result = 'D';
+              }
+
+              manualForms.set(teamId, [result]);
+            } else {
+              // Team has no MD1 match in API data
+              manualForms.set(teamId, []);
+            }
+          });
+
+          console.log(`[Forms] MD1: Built forms for ${manualForms.size} teams from API data`);
+
+          setCachedForms(formsCacheKey, manualForms);
+          setTeamForms(manualForms);
+          setFormsLoading(false);
+          fetchingFormsRef.current.delete(formsCacheKey);
+          return;
+        }
+        
+        // For other matchdays (MD2+), use normal calculation
+        const forms = calculateTeamForms(standings, validMatches);
         setCachedForms(formsCacheKey, forms);
         setTeamForms(forms);
         setFormsLoading(false);
