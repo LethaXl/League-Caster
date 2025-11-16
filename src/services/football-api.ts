@@ -454,13 +454,14 @@ export const getAllLeaguesData = async (): Promise<Record<string, { standings: S
       error?: string;
     }
     
-    Object.entries(response.data.leagues).forEach(([leagueCode, leagueData]: [string, LeagueData]) => {
-      if (leagueData.error) {
+    Object.entries(response.data.leagues).forEach(([leagueCode, leagueData]) => {
+      const typedLeagueData = leagueData as LeagueData;
+      if (typedLeagueData.error) {
         // Skip leagues with errors
         return;
       }
       
-      const mappedStandings = leagueData.standings.map((standing: Standing) => {
+      const mappedStandings = typedLeagueData.standings?.map((standing: Standing) => {
         return {
           ...standing,
           team: {
@@ -471,7 +472,7 @@ export const getAllLeaguesData = async (): Promise<Record<string, { standings: S
       });
       
       // Apply team name mappings to matches as well
-      const mappedMatches = (leagueData.matches || []).map((match: Match) => {
+      const mappedMatches = (typedLeagueData.matches || []).map((match: Match) => {
         return {
           ...match,
           homeTeam: {
@@ -486,8 +487,8 @@ export const getAllLeaguesData = async (): Promise<Record<string, { standings: S
       });
       
       mappedLeagues[leagueCode] = {
-        standings: mappedStandings,
-        currentMatchday: leagueData.currentMatchday,
+        standings: mappedStandings || [],
+        currentMatchday: typedLeagueData.currentMatchday || 1,
         matches: mappedMatches
       };
     });
