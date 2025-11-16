@@ -64,9 +64,10 @@ export async function GET(request: Request) {
               matches,
               source: 'api'
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
             // Handle 429 rate limit errors gracefully
-            if (error.response?.status === 429 || error.message?.includes('rate limit')) {
+            const axiosError = error as { response?: { status?: number }; message?: string };
+            if (axiosError.response?.status === 429 || axiosError.message?.includes('rate limit')) {
               console.error(`❌ Rate limit error fetching all matches for ${leagueCode}`);
               return NextResponse.json(
                 { 
@@ -87,9 +88,10 @@ export async function GET(request: Request) {
               matches,
               source: 'api'
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
             // Handle 429 rate limit errors gracefully
-            if (error.response?.status === 429 || error.message?.includes('rate limit')) {
+            const axiosError = error as { response?: { status?: number }; message?: string };
+            if (axiosError.response?.status === 429 || axiosError.message?.includes('rate limit')) {
               console.error(`❌ Rate limit error fetching matches for ${leagueCode} matchday ${matchdayNum}`);
               return NextResponse.json(
                 { 
@@ -115,9 +117,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const statusCode = error.response?.status || error.status || 500;
+    const axiosError = error as { response?: { status?: number; data?: { message?: string } }; status?: number };
+    const statusCode = axiosError.response?.status || axiosError.status || 500;
     
     console.error('❌ API Error:', errorMessage);
     
@@ -127,7 +130,7 @@ export async function GET(request: Request) {
         { 
           error: 'rate_limited', 
           message: 'Too many requests to football-data. Try again later.',
-          details: error.response?.data?.message || errorMessage
+          details: axiosError.response?.data?.message || errorMessage
         },
         { status: 429 }
       );
