@@ -37,7 +37,7 @@ export class FootballDataManager {
       if (process.env.NODE_ENV === 'development') {
         console.log(`📊 Cache hit for ${leagueCode}`);
       }
-      return { ...data, source: 'cache' };
+      return { ...data, source: 'cache' as const };
     }
     
     // Check if there's already an in-flight request for this league
@@ -55,7 +55,7 @@ export class FootballDataManager {
     }
     
     // Create the fetch promise and store it
-    const fetchPromise = (async () => {
+    const fetchPromise = (async (): Promise<FootballApiData> => {
       try {
         const fetchedData = await this.fetchFromAPI(leagueCode);
         
@@ -65,7 +65,7 @@ export class FootballDataManager {
         // Remove from in-flight requests
         this.inFlightRequests.delete(cacheKey);
         
-        return { ...fetchedData, source: 'api' };
+        return { ...fetchedData, source: 'api' as const };
       } catch (error) {
         // Remove from in-flight requests on error
         this.inFlightRequests.delete(cacheKey);
