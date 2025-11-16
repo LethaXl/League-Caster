@@ -807,12 +807,12 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                 <span className="block w-full text-center">POS</span>
               </th>
               <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-left w-32 sm:w-40 min-w-[120px] sm:min-w-[160px] md:w-56 md:min-w-[220px] md:pr-8 text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(1)}`}>Team</th>
-              <th className={`px-0.5 sm:px-6 pl-2 sm:pl-8 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(2)}`}>P</th>
-              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(3)}`}>W</th>
-              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(4)}`}>D</th>
-              <th className={`px-0.5 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(5)}`}>L</th>
-              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(6)}`}>GD</th>
-              <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(7)}`}>Pts</th>
+              <th className={`px-0.5 sm:px-6 pl-3 sm:pl-10 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(2)}`}>P</th>
+              <th className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(3)}`}>W</th>
+              <th className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(4)}`}>D</th>
+              <th className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(5)}`}>L</th>
+              <th className={`px-1 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(6)}`}>GD</th>
+              <th className={`px-1 sm:px-6 pl-1 sm:pl-2 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(7)}`}>Pts</th>
               <th className={`px-1 sm:px-6 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-semibold text-secondary uppercase tracking-wider border-b border-card-border/50 ${getColumnClass(8)}`}>Form →</th>
             </tr>
           </thead>
@@ -868,16 +868,16 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                       </div>
                     </div>
                   </td>
-                  <td className={`px-0.5 sm:px-6 sm:pl-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(2)}`}>{standing.playedGames}</td>
-                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(3)}`}>{standing.won}</td>
-                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(4)}`}>{standing.draw}</td>
-                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(5)}`}>{standing.lost}</td>
-                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(6)}`}>
+                  <td className={`px-0.5 sm:px-6 pl-3 sm:pl-10 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(2)}`}>{standing.playedGames}</td>
+                  <td className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(3)}`}>{standing.won}</td>
+                  <td className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(4)}`}>{standing.draw}</td>
+                  <td className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(5)}`}>{standing.lost}</td>
+                  <td className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm text-primary text-center ${getColumnClass(6)}`}>
                     {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
                   </td>
-                  <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm font-bold text-primary text-center ${getColumnClass(7)}`}>{standing.points}</td>
+                  <td className={`px-0.5 sm:px-6 pl-1 sm:pl-2 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm font-bold text-primary text-center ${getColumnClass(7)}`}>{standing.points}</td>
                   <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-center ${getColumnClass(8)}`}>
-                    <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                    <div className="flex items-center justify-center gap-0 sm:gap-0.5">
                       {(() => {
                         const form = displayForms.get(standing.team.id) || [];
                         
