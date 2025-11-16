@@ -30,7 +30,7 @@ export class FootballDataManager {
     const cacheKey = `league_${leagueCode}`;
     
     // Try cache first
-    let data = await cacheService.get<FootballApiData>(cacheKey);
+    const data = await cacheService.get<FootballApiData>(cacheKey);
     
     if (data) {
       // Only log cache hit if in development

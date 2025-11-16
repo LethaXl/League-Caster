@@ -59,7 +59,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
-    const handleResize = () => {
+    const handleResize = (): void => {
       setScreenWidth(window.innerWidth);
     };
     
@@ -116,7 +116,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
   const shouldRefreshCache = useCallback((): boolean => {
     const now = Date.now();
     return now - cacheLastRefreshed.current > CACHE_EXPIRY_TIME;
-  }, [CACHE_EXPIRY_TIME]);
+  }, []);
 
   // Function to clear the cache and force a refresh
   const clearCache = useCallback(() => {

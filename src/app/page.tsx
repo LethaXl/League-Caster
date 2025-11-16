@@ -762,7 +762,7 @@ export default function Home() {
       
       let standingsData: Standing[];
       let currentMatchdayData: number;
-      let completedMatches: Match[] = [];
+      const completedMatches: Match[] = [];
       
       if (standingsCache.current.has(combinedCacheKey) && matchdayCache.current.has(combinedCacheKey)) {
         // If both standings and current matchday are already cached, use them
@@ -1025,7 +1025,7 @@ export default function Home() {
           
           // In race mode, we need ALL matches (including unselected teams' matches) for accurate form calculation
           // Get all matches from localStorage, not just ones with predictions
-          let allStoredMatches: Match[] = [];
+          const allStoredMatches: Match[] = [];
           if (isRaceMode) {
             for (let md = 1; md <= targetMatchday; md++) {
               try {

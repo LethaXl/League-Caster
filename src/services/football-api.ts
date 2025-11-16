@@ -447,7 +447,14 @@ export const getAllLeaguesData = async (): Promise<Record<string, { standings: S
     // Apply team name mappings to all standings and matches
     const mappedLeagues: Record<string, { standings: Standing[], currentMatchday: number, matches: Match[] }> = {};
     
-    Object.entries(response.data.leagues).forEach(([leagueCode, leagueData]: [string, any]) => {
+    interface LeagueData {
+      standings?: Standing[];
+      currentMatchday?: number;
+      matches?: Match[];
+      error?: string;
+    }
+    
+    Object.entries(response.data.leagues).forEach(([leagueCode, leagueData]: [string, LeagueData]) => {
       if (leagueData.error) {
         // Skip leagues with errors
         return;
@@ -561,9 +568,10 @@ export const getCompletedMatchesUpToMatchday = async (leagueCode: string, upToMa
         });
       
       return allMatches;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle 429 rate limit errors gracefully
-      if (error.response?.status === 429 || error.response?.data?.error === 'rate_limited') {
+      const axiosError = error as { response?: { status?: number; data?: { error?: string } } };
+      if (axiosError.response?.status === 429 || axiosError.response?.data?.error === 'rate_limited') {
         console.warn(`Rate limited when fetching completed matches for ${leagueCode}. Returning empty array.`);
         return []; // Return empty array so forms can still work with cached/localStorage data
       }
