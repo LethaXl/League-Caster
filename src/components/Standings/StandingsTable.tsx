@@ -877,85 +877,51 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                   </td>
                   <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-[10px] sm:text-sm font-bold text-primary text-center ${getColumnClass(7)}`}>{standing.points}</td>
                   <td className={`px-0.5 sm:px-6 py-1 sm:py-2 whitespace-nowrap text-center ${getColumnClass(8)}`}>
-                    <div className="flex items-center justify-center gap-0.5 sm:gap-1 relative">
+                    <div className="flex items-center justify-center gap-0.5 sm:gap-1">
                       {(() => {
                         const form = displayForms.get(standing.team.id) || [];
-                        const hasForm = form.length > 0;
-                        const showPlaceholder = formsLoading || (hasForm && !formsReady);
                         
-                        return (
-                          <>
-                            {/* Placeholder circles - fade out when forms are ready */}
-                            {showPlaceholder && (
-                              <div className="absolute inset-0 flex items-center justify-center gap-0.5 sm:gap-1">
-                                {Array.from({ length: 5 }).map((_, idx) => (
-                                  <div
-                                    key={`placeholder-${idx}`}
-                                    className="rounded-full bg-gray-600/30 flex items-center justify-center transition-opacity duration-300 ease-in-out"
-                                    style={{ 
-                                      width: isMobile ? '1rem' : '1.25rem', 
-                                      height: isMobile ? '1rem' : '1.25rem', 
-                                      minWidth: isMobile ? '1rem' : '1.25rem', 
-                                      minHeight: isMobile ? '1rem' : '1.25rem',
-                                      maxWidth: isMobile ? '1rem' : '1.25rem',
-                                      maxHeight: isMobile ? '1rem' : '1.25rem',
-                                      borderRadius: '50%',
-                                      opacity: hasForm && formsReady ? 0 : 1
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                            
-                            {/* Actual form circles - fade in when ready */}
-                            {hasForm && (
-                              <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                                {[...form].reverse().map((result, idx) => {
-                                  const bgColor = result === 'W' ? 'bg-green-500' : result === 'D' ? 'bg-gray-500' : 'bg-red-500';
-                                  return (
-                                    <div
-                                      key={idx}
-                                      className={`rounded-full ${bgColor} flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold transition-opacity duration-300 ease-in-out`}
-                                      style={{ 
-                                        width: isMobile ? '1rem' : '1.25rem', 
-                                        height: isMobile ? '1rem' : '1.25rem', 
-                                        minWidth: isMobile ? '1rem' : '1.25rem', 
-                                        minHeight: isMobile ? '1rem' : '1.25rem',
-                                        maxWidth: isMobile ? '1rem' : '1.25rem',
-                                        maxHeight: isMobile ? '1rem' : '1.25rem',
-                                        borderRadius: '50%',
-                                        opacity: formsReady ? 1 : 0
-                                      }}
-                                    >
-                                      {result}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            
-                            {/* Show placeholders if no form and not loading */}
-                            {!hasForm && !formsLoading && (
-                              <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                                {Array.from({ length: 5 }).map((_, idx) => (
-                                  <div
-                                    key={`empty-${idx}`}
-                                    className="rounded-full bg-gray-600/30 flex items-center justify-center"
-                                    style={{ 
-                                      width: isMobile ? '1rem' : '1.25rem', 
-                                      height: isMobile ? '1rem' : '1.25rem', 
-                                      minWidth: isMobile ? '1rem' : '1.25rem', 
-                                      minHeight: isMobile ? '1rem' : '1.25rem',
-                                      maxWidth: isMobile ? '1rem' : '1.25rem',
-                                      maxHeight: isMobile ? '1rem' : '1.25rem',
-                                      borderRadius: '50%'
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        );
+                        // Always build exactly 5 slots - reverse form so most recent is on the right
+                        const reversedForm = [...form].reverse();
+                        const slots = Array.from({ length: 5 }, (_, i) => reversedForm[i] ?? null);
+                        
+                        // Unified loading condition for all bubbles
+                        const isLoading = formsLoading || !formsReady;
+                        
+                        return slots.map((result, index) => {
+                          // Same loading check for all circles
+                          const isLoadingBubble = isLoading || result === null;
+                          
+                          // Determine color - same logic for all
+                          let bgColor = 'bg-gray-600/30'; // Default placeholder color
+                          if (!isLoadingBubble && result) {
+                            if (result === 'W') bgColor = 'bg-green-500';
+                            else if (result === 'D') bgColor = 'bg-gray-500';
+                            else if (result === 'L') bgColor = 'bg-red-500';
+                          }
+                          
+                          // Same transition and opacity for all circles
+                          const opacity = isLoadingBubble ? 0.6 : 1;
+                          
+                          return (
+                            <div
+                              key={index}
+                              className={`rounded-full ${bgColor} flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold transition-opacity duration-300 ease-in-out`}
+                              style={{ 
+                                width: isMobile ? '1rem' : '1.25rem', 
+                                height: isMobile ? '1rem' : '1.25rem', 
+                                minWidth: isMobile ? '1rem' : '1.25rem', 
+                                minHeight: isMobile ? '1rem' : '1.25rem',
+                                maxWidth: isMobile ? '1rem' : '1.25rem',
+                                maxHeight: isMobile ? '1rem' : '1.25rem',
+                                borderRadius: '50%',
+                                opacity: opacity
+                              }}
+                            >
+                              {!isLoadingBubble && result ? result : ''}
+                            </div>
+                          );
+                        });
                       })()}
                     </div>
                   </td>
