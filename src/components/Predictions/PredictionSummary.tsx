@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Match, Prediction } from '@/types/predictions';
 import { Standing } from '@/services/football-api';
@@ -22,6 +22,12 @@ export default function PredictionSummary({
 }: PredictionSummaryProps) {
   const { isRaceMode, tableDisplayMode, setTableDisplayMode } = usePrediction();
   const [viewMode, setViewMode] = useState<'table' | 'summary'>('summary');
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [showRightShadow, setShowRightShadow] = useState(false);
+  
+  // Animation states
+  const [isEntering, setIsEntering] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
   
   // Add state for screen width tracking
   const [screenWidth, setScreenWidth] = useState(0);
@@ -44,7 +50,18 @@ export default function PredictionSummary({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Disable background scrolling when modal is open
+
+  // Handle enter animation
+  useEffect(() => {
+    // Trigger enter animation on mount
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsEntering(false);
+      });
+    });
+  }, []);
+
+  // Disable background scrolling when full screen is open
   useEffect(() => {
     // Save the current overflow value
     const originalOverflow = document.body.style.overflow;
@@ -57,6 +74,15 @@ export default function PredictionSummary({
       document.body.style.overflow = originalOverflow;
     };
   }, []);
+
+  // Handle close with animation
+  const handleClose = () => {
+    setIsExiting(true);
+    // Wait for animation to complete before calling onClose
+    setTimeout(() => {
+      onClose();
+    }, 300); // Match animation duration
+  };
   
   // Determine if we're in different constraint views
   const isMobileSConstrainedView = screenWidth >= 320 && screenWidth < 360;
@@ -102,6 +128,21 @@ export default function PredictionSummary({
   const getTeamPoints = (teamId: number) => {
     return standings.find(s => s.team.id === teamId)?.points || 0;
   };
+
+  const getTeamPosition = (teamId: number) => {
+    return standings.find(s => s.team.id === teamId)?.position ?? '-';
+  };
+
+  const getOrdinalSuffix = (value: number | string) => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return '';
+    const j = num % 10;
+    const k = num % 100;
+    if (j === 1 && k !== 11) return 'st';
+    if (j === 2 && k !== 12) return 'nd';
+    if (j === 3 && k !== 13) return 'rd';
+    return 'th';
+  };
   
   // Helper function to get result text
   const getResultText = (match: Match, prediction: Prediction | undefined, teamId: number) => {
@@ -144,7 +185,7 @@ export default function PredictionSummary({
       case 'away':
         return isHomeTeam ? 'text-red-400' : 'text-green-400';
       case 'draw':
-        return 'text-yellow-300';
+        return 'text-gray-300';
       case 'custom':
         if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
           if (prediction.homeGoals > prediction.awayGoals) {
@@ -152,10 +193,10 @@ export default function PredictionSummary({
           } else if (prediction.homeGoals < prediction.awayGoals) {
             return isHomeTeam ? 'text-red-400' : 'text-green-400';
           } else {
-            return 'text-yellow-300';
+            return 'text-gray-300';
           }
         }
-        return 'text-yellow-300';
+        return 'text-gray-300';
       default:
         return 'text-gray-400';
     }
@@ -173,7 +214,7 @@ export default function PredictionSummary({
       case 'away':
         return isHomeTeam ? 'bg-red-800/30 border-l-4 border-red-400' : 'bg-green-800/30 border-l-4 border-green-400';
       case 'draw':
-        return 'bg-yellow-700/20 border-l-4 border-yellow-300';
+        return 'bg-gray-600/50 border-l-4 border-gray-500';
       case 'custom':
         if (prediction.homeGoals !== undefined && prediction.awayGoals !== undefined) {
           if (prediction.homeGoals > prediction.awayGoals) {
@@ -181,10 +222,10 @@ export default function PredictionSummary({
           } else if (prediction.homeGoals < prediction.awayGoals) {
             return isHomeTeam ? 'bg-red-800/30 border-l-4 border-red-400' : 'bg-green-800/30 border-l-4 border-green-400';
           } else {
-            return 'bg-yellow-700/20 border-l-4 border-yellow-300';
+            return 'bg-gray-600/50 border-l-4 border-gray-500';
           }
         }
-        return 'bg-yellow-700/20 border-l-4 border-yellow-300';
+        return 'bg-gray-600/50 border-l-4 border-gray-500';
       default:
         return 'bg-gray-800/30';
     }
@@ -208,6 +249,30 @@ export default function PredictionSummary({
   // Get all matchdays from the matches
   const allMatchdays = [...new Set(matches.map(match => match.matchday || 0))].sort((a, b) => a - b);
   
+  // Determine if we should make the points row sticky (only if there are many matchdays)
+  const shouldStickyPoints = allMatchdays.length >= 5;
+
+  const tableScrollHeightClass = shouldStickyPoints
+    ? 'max-h-[calc(100vh-115px)]'
+    : 'max-h-[calc(100vh-280px)]';
+  const stickyHeaderLineClass = "after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-0 after:h-px after:bg-[#2a2a2a]";
+  const stickyColumnLineClass = "before:content-[''] before:absolute before:top-0 before:bottom-0 before:right-0 before:w-px before:bg-[#2a2a2a]";
+  
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const updateShadow = () => {
+      if (!container) return;
+      const { scrollLeft, clientWidth, scrollWidth } = container;
+      setShowRightShadow(scrollLeft + clientWidth < scrollWidth - 4);
+    };
+
+    updateShadow();
+    container.addEventListener('scroll', updateShadow);
+    return () => container.removeEventListener('scroll', updateShadow);
+  }, [screenWidth, viewMode, shouldStickyPoints]);
+
   // Group matches by matchday and team
   const matchesByMatchdayAndTeam = new Map<number, Map<number, Match[]>>();
   
@@ -241,49 +306,44 @@ export default function PredictionSummary({
     }
   });
   
-  // Determine modal classes based on screen size
-  const getModalClasses = () => {
-    if (isMobileSConstrainedView) {
-      return "fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-2";
+  // Full screen container classes with animation
+  const getFullScreenClasses = () => {
+    const baseClasses = "fixed inset-0 bg-[#0a0a0a] z-50 overflow-y-auto transition-all duration-300 ease-out will-change-transform";
+    let animationClasses = "";
+    
+    if (isEntering) {
+      animationClasses = "opacity-0 translate-y-full";
+    } else if (isExiting) {
+      animationClasses = "opacity-0 translate-y-full";
+    } else {
+      animationClasses = "opacity-100 translate-y-0";
     }
-    if (isMobileMConstrainedView) {
-      return "fixed inset-0 bg-black/80 z-50 overflow-y-hidden flex items-center justify-center p-3";
-    }
-    if (isMobileLConstrainedView || isMobileXLConstrainedView) {
-      return "fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-3";
-    }
-    if (isTabletSmallConstrainedView) {
-      return "fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-3";
-    }
-    if (isSpecificConstrainedView) {
-      return "fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-4";
-    }
-    // Default for larger screens
-    return "fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-4";
+    
+    return `${baseClasses} ${animationClasses}`;
   };
   
-  // Modal content classes
-  const getModalContentClasses = () => {
+  // Content container classes
+  const getContentClasses = () => {
     if (isMobileSConstrainedView) {
-      return "bg-[#111111] rounded-lg p-2 w-auto border border-[#2a2a2a] shadow-lg max-h-[95vh] overflow-y-auto";
+      return "min-h-screen bg-[#111111] p-2";
     }
     if (isMobileMConstrainedView) {
-      return "bg-[#111111] rounded-lg p-3 w-full max-w-[100vw] border border-[#2a2a2a] shadow-lg max-h-[95vh] overflow-y-auto";
+      return "min-h-screen bg-[#111111] p-3";
     }
     if (isMobileLConstrainedView || isMobileXLConstrainedView) {
-      return "bg-[#111111] rounded-lg p-4 w-auto border border-[#2a2a2a] shadow-lg max-h-[95vh] overflow-y-auto";
+      return "min-h-screen bg-[#111111] p-4";
     }
     if (isTabletSmallConstrainedView) {
-      return "bg-[#111111] rounded-lg p-4 w-full max-w-3xl border border-[#2a2a2a] shadow-lg max-h-[95vh] overflow-y-auto";
+      return "min-h-screen bg-[#111111] p-4";
     }
     if (isMediumConstrainedView) {
-      return "bg-[#111111] rounded-lg p-4 w-full max-w-4xl border border-[#2a2a2a] shadow-lg max-h-[95vh] overflow-y-auto";
+      return "min-h-screen bg-[#111111] p-5";
     }
     if (isSpecificConstrainedView) {
-      return "bg-[#111111] rounded-lg p-5 w-full max-w-5xl border border-[#2a2a2a] shadow-lg max-h-[92vh] overflow-y-auto";
+      return "min-h-screen bg-[#111111] p-6";
     }
     // Default for larger screens
-    return "bg-[#111111] rounded-lg p-6 w-full max-w-6xl border border-[#2a2a2a] shadow-lg max-h-[90vh] overflow-y-auto";
+    return "min-h-screen bg-[#111111] p-6";
   };
   
   // Headings and title sizes
@@ -377,17 +437,19 @@ export default function PredictionSummary({
   const renderMobileView = () => {
     // For all mobile sizes, show the summary table (remove the special message for isMobileSConstrainedView)
     return (
-      <div className={`overflow-x-auto px-2${isMobileSConstrainedView ? ' mobile-s' : ''}`}>
+      <div
+        ref={scrollContainerRef}
+        className={`overflow-x-auto overflow-y-auto px-2 ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''}`}
+        style={showRightShadow ? { boxShadow: 'inset -20px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
+      >
         <table className="border-collapse min-w-0 w-auto">
-          <thead>
+          <thead className="sticky top-0 z-20">
             <tr>
-              <th className={`px-1 py-2 text-center text-xs font-semibold text-[#f7e479] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[60px] min-w-[60px]' : isMobileSConstrainedView ? 'w-[24px] min-w-[24px] pr-1 p-0 border-r border-[#222] text-[9px]' : isMobileMConstrainedView ? 'w-[32px] min-w-[32px] pr-2 p-0 border-r border-[#222] text-xs' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[40px] min-w-[40px] pr-4 p-0 border-r border-[#222]' : 'min-w-[40px]'}`}>
-                {isTabletSmallConstrainedView ? (
-                  <div className="flex flex-col">
-                    <span>Match</span>
-                    <span>Day</span>
-                  </div>
-                ) : 'Matchday'}
+              <th className={`relative sticky left-0 z-30 bg-[#111111] px-1 py-2 border-b border-[#2a2a2a] border-r-2 border-[#2a2a2a] ${stickyHeaderLineClass} ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
+                <div className={`flex flex-col items-center text-center font-bold text-[#f7e479] leading-tight mb-2 ${isMobileSConstrainedView ? 'text-[10px]' : isMobileMConstrainedView ? 'text-xs' : isTabletSmallConstrainedView ? 'text-xs' : 'text-sm'}`}>
+                  <span>Forecast</span>
+                  <span>Summary</span>
+                </div>
               </th>
               {sortedTeamIds.map(teamId => {
                 const team = getTeamDetails(teamId);
@@ -396,7 +458,7 @@ export default function PredictionSummary({
                 return (
                   <th
                     key={teamId}
-                    className={`px-1 py-2 text-center font-semibold text-primary border-b border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-xs' : 'text-[10px]'} ${isMobileSConstrainedView ? '' : isMobileMConstrainedView ? '' : (isMobileXLConstrainedView || isMobileLConstrainedView ? '' : 'min-w-[100px]')}`}
+                    className={`relative sticky top-0 z-10 bg-[#111111] px-1 py-2 text-center font-semibold text-primary border-b border-[#2a2a2a] ${stickyHeaderLineClass} ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-xs' : 'text-[10px]'} ${isMobileSConstrainedView ? '' : isMobileMConstrainedView ? '' : (isMobileXLConstrainedView || isMobileLConstrainedView ? '' : 'min-w-[100px]')}`}
                   >
                     <div className="flex flex-col items-center">
                       <div className={isMobileSConstrainedView ? 'relative h-5 w-5 mb-0.5' : getTeamLogoClasses()}>
@@ -418,9 +480,9 @@ export default function PredictionSummary({
             {allMatchdays.map(matchday => (
               <tr key={matchday} className="border-b border-[#2a2a2a]/50 last:border-b-0">
                 <td
-                  className={`px-1 py-2 text-center font-semibold text-white ${isMobileSConstrainedView ? 'text-xs w-[24px] min-w-[24px] pr-1 p-0 border-r border-[#222]' : isMobileMConstrainedView ? 'text-xs w-[32px] min-w-[32px] pr-2 p-0 border-r border-[#222]' : 'text-xs'} ${isTabletSmallConstrainedView ? 'w-[60px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[40px] min-w-[40px] pr-4 p-0 border-r border-[#222]' : ''}`}
+                  className={`relative sticky left-0 z-10 bg-[#111111] px-1 py-2 text-center font-semibold text-white border-r-2 border-[#2a2a2a] ${stickyColumnLineClass} ${isMobileSConstrainedView ? 'text-[8px] w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'text-[9px] w-[75px] min-w-[75px] pr-2 p-0' : 'text-[10px]'} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}
                 >
-                  {matchday}
+                  Matchday {matchday}
                 </td>
                 
                 {sortedTeamIds.map(teamId => {
@@ -438,15 +500,14 @@ export default function PredictionSummary({
                             const prediction = predictions.get(match.id);
                             const isHome = match.homeTeam.id === teamId;
                             const opponent = isHome ? match.awayTeam : match.homeTeam;
-                            const cellKey = `${match.id}-${teamId}`;
                             const isMobileTapExpand = isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView;
                             return (
                               <div
                                 key={match.id}
-                                className={`flex items-center justify-between text-[10px] p-1.5 rounded ${getResultBgColorClass(match, prediction, teamId)} select-none relative`}
+                                className={`flex items-center justify-center text-[10px] p-1.5 rounded ${getResultBgColorClass(match, prediction, teamId)} select-none relative`}
                                 style={isMobileTapExpand ? {minWidth: 0, maxWidth: '100vw'} : {}}
                               >
-                                <div className="flex items-center flex-1 relative">
+                                <div className="flex items-center justify-center relative">
                                   <span className="text-white text-[8px] font-medium mr-0.5 min-w-[16px]">
                                     {isHome ? 'H' : 'A'}
                                   </span>
@@ -473,16 +534,17 @@ export default function PredictionSummary({
             ))}
             
             {/* Total points row */}
-            <tr className="border-t-2 border-[#2a2a2a]">
-              <td className={`px-1 py-2 text-center font-semibold text-[#f7e479] text-xs ${isTabletSmallConstrainedView ? 'w-[60px]' : isMobileSConstrainedView ? 'w-[24px] min-w-[24px] pr-1 p-0 border-r border-[#222]' : isMobileMConstrainedView ? 'w-[32px] min-w-[32px] pr-2 p-0 border-r border-[#222]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[40px] min-w-[40px] pr-4 p-0 border-r border-[#222]' : ''}`}>
-                {'Points:'}
+            <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} border-t-2 border-[#2a2a2a]`}>
+              <td className={`relative ${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-1 py-2 text-center font-semibold text-[#f7e479] text-xs border-r-2 border-[#2a2a2a] ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
+                {'Standings:'}
               </td>
               {sortedTeamIds.map(teamId => {
                 const points = getTeamPoints(teamId);
+                const position = getTeamPosition(teamId);
                 
                 return (
-                  <td key={`points-${teamId}`} className={`px-1 py-2 text-center ${isMobileSConstrainedView ? 'text-xs' : isMobileMConstrainedView ? 'text-base' : 'text-base'}`}>
-                    <span className="text-base font-bold text-white">{points}</span>
+                  <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-1 py-2 text-center ${isMobileSConstrainedView ? 'text-[10px]' : 'text-sm'}`}>
+                    <span className="font-mono font-semibold text-gray-100">{`${position}${position !== '-' ? getOrdinalSuffix(position) : ''} • ${points}`}</span>
                   </td>
                 );
               })}
@@ -494,8 +556,8 @@ export default function PredictionSummary({
   };
   
   return (
-    <div className={getModalClasses()}>
-      <div className={getModalContentClasses()}>
+    <div className={getFullScreenClasses()}>
+      <div className={getContentClasses()}>
         {viewMode === 'table' ? (
           <>
             <div className={getHeaderClasses()}>
@@ -519,7 +581,7 @@ export default function PredictionSummary({
             
             <div className={getBottomMarginClasses()}>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
               >
                 Close
@@ -528,12 +590,6 @@ export default function PredictionSummary({
           </>
         ) : (
           <>
-            <div className={getHeaderClasses()}>
-              <div className="flex-grow text-center">
-                <h2 className={`${isMobileSConstrainedView ? 'text-[15px]' : getTitleClasses()} font-bold text-[#f7e479]`}>Forecast Summary</h2>
-              </div>
-            </div>
-            
             {/* Debug info */}
             {matchdayData.matchCount === 0 && (
               <div className="text-center text-red-400 mb-4">
@@ -545,18 +601,20 @@ export default function PredictionSummary({
             {(isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView) ? (
               renderMobileView()
             ) : (
-              // Regular desktop view remains untouched
-              <div className="overflow-x-auto">
+              // Regular desktop view - original layout
+              <div
+                ref={scrollContainerRef}
+                className={`overflow-x-auto overflow-y-auto ${tableScrollHeightClass}`}
+                style={showRightShadow ? { boxShadow: 'inset -25px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
+              >
                 <table className="w-full border-collapse">
-                  <thead>
+                  <thead className="sticky top-0 z-20">
                     <tr>
-                      <th className={`px-2 py-3 text-center text-sm font-semibold text-[#f7e479] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[70px] min-w-[70px]' : 'min-w-[90px]'}`}>
-                        {isTabletSmallConstrainedView ? (
-                          <div className="flex flex-col">
-                            <span>Match</span>
-                            <span>Day</span>
-                          </div>
-                        ) : 'Matchday'}
+                      <th className={`relative sticky left-0 z-30 bg-[#111111] px-2 py-3 border-b border-[#2a2a2a] border-r-2 border-[#2a2a2a] ${stickyHeaderLineClass} ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                        <div className={`flex flex-col items-center text-center font-bold text-[#f7e479] leading-tight mb-2 ${isTabletSmallConstrainedView ? 'text-sm' : 'text-base'}`}>
+                          <span>Forecast</span>
+                          <span>Summary</span>
+                        </div>
                       </th>
                       {sortedTeamIds.map(teamId => {
                         const team = getTeamDetails(teamId);
@@ -565,7 +623,7 @@ export default function PredictionSummary({
                         return (
                           <th
                             key={teamId}
-                            className={`px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] ${isMobileXLConstrainedView ? 'max-w-[70px] min-w-[50px]' : 'min-w-[100px]'}`}
+                            className={`relative sticky top-0 z-10 bg-[#111111] px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] ${stickyHeaderLineClass} ${isMobileXLConstrainedView ? 'max-w-[70px] min-w-[50px]' : 'min-w-[100px]'}`}
                           >
                             <div className="flex flex-col items-center">
                               <div className="relative h-8 w-8 mb-2">
@@ -581,16 +639,13 @@ export default function PredictionSummary({
                           </th>
                         );
                       })}
-                      <th className="px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] min-w-[90px]">
-                        &nbsp;
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {allMatchdays.map(matchday => (
                       <tr key={matchday} className="border-b border-[#2a2a2a]/50 last:border-b-0">
-                        <td className={`px-2 py-3 text-center font-semibold text-white ${isTabletSmallConstrainedView ? 'w-[70px]' : ''}`}>
-                          {matchday}
+                        <td className={`relative sticky left-0 z-10 bg-[#111111] px-2 py-3 text-center font-semibold text-white border-r-2 border-[#2a2a2a] text-xs ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                          Matchday {matchday}
                         </td>
                         
                         {sortedTeamIds.map(teamId => {
@@ -610,8 +665,8 @@ export default function PredictionSummary({
                                     
                                     // Now use the colored box approach for all screen sizes
                                     return (
-                                      <div key={match.id} className={`flex items-center text-sm p-2 rounded mb-2 ${getResultBgColorClass(match, prediction, teamId)}`}>
-                                        <div className="flex items-center flex-1">
+                                      <div key={match.id} className={`flex items-center justify-center text-sm p-2 rounded mb-2 ${getResultBgColorClass(match, prediction, teamId)}`}>
+                                        <div className="flex items-center justify-center">
                                           <span className="text-gray-300 text-xs font-medium mr-1 min-w-[22px]">
                                             {isHome ? '(H)' : '(A)'}
                                           </span>
@@ -623,7 +678,7 @@ export default function PredictionSummary({
                                               className="object-contain"
                                             />
                                           </div>
-                                          <span className="text-xs text-primary truncate flex-1" title={opponent.name}>
+                                          <span className="text-xs text-primary truncate" title={opponent.name}>
                                             {opponent.shortName || opponent.name}
                                           </span>
                                         </div>
@@ -637,28 +692,24 @@ export default function PredictionSummary({
                             </td>
                           );
                         })}
-                        
-                        <td className="px-2 py-3 text-center">
-                          &nbsp;
-                        </td>
                       </tr>
                     ))}
                     
                     {/* Total points row */}
-                    <tr className="border-t-2 border-[#2a2a2a]">
-                      <td className={`px-2 py-3 text-center font-semibold text-[#f7e479] ${isTabletSmallConstrainedView ? 'w-[70px]' : ''}`}>
-                        {'Points:'}
+                    <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} border-t-2 border-[#2a2a2a]`}>
+                      <td className={`relative ${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-2 py-3 text-center font-semibold text-[#f7e479] border-r-2 border-[#2a2a2a] ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                        {'Standings:'}
                       </td>
                       {sortedTeamIds.map(teamId => {
                         const points = getTeamPoints(teamId);
+                        const position = getTeamPosition(teamId);
                         
                         return (
-                          <td key={`points-${teamId}`} className="px-2 py-3 text-center">
-                            <span className="text-lg font-bold text-white">{points}</span>
+                          <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-2 py-3 text-center`}>
+                            <span className="font-mono text-base font-semibold text-gray-100">{`${position}${position !== '-' ? getOrdinalSuffix(position) : ''} • ${points}`}</span>
                           </td>
                         );
                       })}
-                      <td className="px-2 py-3">&nbsp;</td>
                     </tr>
                   </tbody>
                 </table>
@@ -667,7 +718,7 @@ export default function PredictionSummary({
             
             <div className={getBottomMarginClasses()}>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
               >
                 Close
