@@ -43,6 +43,20 @@ export default function PredictionSummary({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Disable background scrolling when modal is open
+  useEffect(() => {
+    // Save the current overflow value
+    const originalOverflow = document.body.style.overflow;
+    
+    // Disable scrolling on the body
+    document.body.style.overflow = 'hidden';
+    
+    // Re-enable scrolling when component unmounts
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
   
   // Determine if we're in different constraint views
   const isMobileSConstrainedView = screenWidth >= 320 && screenWidth < 360;
