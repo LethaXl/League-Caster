@@ -29,6 +29,66 @@ export default function PredictionSummary({
   const [isEntering, setIsEntering] = useState(true);
   const [isExiting, setIsExiting] = useState(false);
   
+  // Type for matchday values
+  type MdValue = 'all' | number;
+  
+  // Applied filter states (these are what actually filter the table)
+  const [appliedMatchdayMin, setAppliedMatchdayMin] = useState<MdValue>('all');
+  const [appliedMatchdayMax, setAppliedMatchdayMax] = useState<MdValue>('all');
+  const [appliedTeamIds, setAppliedTeamIds] = useState<number[]>(selectedTeamIds);
+  
+  // Temporary filter states (for the edit panel - these are what the user is editing)
+  const [showEditPanel, setShowEditPanel] = useState(false);
+  const [tempMatchdayMin, setTempMatchdayMin] = useState<MdValue>('all');
+  const [tempMatchdayMax, setTempMatchdayMax] = useState<MdValue>('all');
+  const [tempTeamIds, setTempTeamIds] = useState<number[]>(selectedTeamIds);
+  const [teamSelectionError, setTeamSelectionError] = useState(false);
+  const [matchdayRangeError, setMatchdayRangeError] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<'from' | 'to' | null>(null);
+  const fromDropdownRef = useRef<HTMLDivElement>(null);
+  const toDropdownRef = useRef<HTMLDivElement>(null);
+  const fromButtonRef = useRef<HTMLButtonElement>(null);
+  const toButtonRef = useRef<HTMLButtonElement>(null);
+  
+  // Sync appliedTeamIds when selectedTeamIds changes
+  useEffect(() => {
+    setAppliedTeamIds(selectedTeamIds);
+    setTempTeamIds(selectedTeamIds);
+  }, [selectedTeamIds]);
+  
+  // When panel opens, initialize temp state with current applied filters
+  useEffect(() => {
+    if (showEditPanel) {
+      setTempMatchdayMin(appliedMatchdayMin);
+      setTempMatchdayMax(appliedMatchdayMax);
+      setTempTeamIds(appliedTeamIds);
+      setTeamSelectionError(false);
+      setMatchdayRangeError(false);
+      setOpenDropdown(null);
+    }
+  }, [showEditPanel, appliedMatchdayMin, appliedMatchdayMax, appliedTeamIds]);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDropdown === 'from' && fromDropdownRef.current && fromButtonRef.current && 
+          !fromDropdownRef.current.contains(event.target as Node) && 
+          !fromButtonRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+      if (openDropdown === 'to' && toDropdownRef.current && toButtonRef.current && 
+          !toDropdownRef.current.contains(event.target as Node) && 
+          !toButtonRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+
+    if (openDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openDropdown]);
+  
   // Add state for screen width tracking
   const [screenWidth, setScreenWidth] = useState(0);
   
@@ -240,14 +300,183 @@ export default function PredictionSummary({
   };
   
   // Sort teams by position in the standings
-  const sortedTeamIds = [...selectedTeamIds].sort((a, b) => {
+  const allSortedTeamIds = [...selectedTeamIds].sort((a, b) => {
     const teamAPosition = standings.find(s => s.team.id === a)?.position || 0;
     const teamBPosition = standings.find(s => s.team.id === b)?.position || 0;
     return teamAPosition - teamBPosition;
   });
   
+  // Apply team filter (use appliedTeamIds, not tempTeamIds)
+  const sortedTeamIds = allSortedTeamIds.filter(teamId => appliedTeamIds.includes(teamId));
+  
   // Get all matchdays from the matches
-  const allMatchdays = [...new Set(matches.map(match => match.matchday || 0))].sort((a, b) => a - b);
+  const allAvailableMatchdays = [...new Set(matches.map(match => match.matchday || 0))].sort((a, b) => a - b);
+  
+  // Get min and max available matchdays
+  const minMatchday = allAvailableMatchdays.length > 0 ? Math.min(...allAvailableMatchdays) : 1;
+  const maxMatchday = allAvailableMatchdays.length > 0 ? Math.max(...allAvailableMatchdays) : 38;
+  
+  // Get effective numeric range from MdValue
+  const getEffectiveFrom = (md: MdValue) => md === 'all' ? minMatchday : md;
+  const getEffectiveTo = (md: MdValue) => md === 'all' ? maxMatchday : md;
+  
+  // Get effective numeric range (for validation - use temp values)
+  const effectiveFrom = getEffectiveFrom(tempMatchdayMin);
+  const effectiveTo = getEffectiveTo(tempMatchdayMax);
+  
+  // Check if filters are active (different from defaults) - use applied filters
+  const hasActiveFilters = appliedTeamIds.length !== allSortedTeamIds.length || 
+                           appliedMatchdayMin !== 'all' || 
+                           appliedMatchdayMax !== 'all';
+  
+  // Validate filters (using temp values)
+  const isFilterValid = () => {
+    const hasTeams = tempTeamIds.length > 0;
+    const hasValidRange = effectiveFrom <= effectiveTo;
+    return hasTeams && hasValidRange;
+  };
+  
+  // Get available matchdays for "To" dropdown (must be >= From)
+  const getAvailableToMatchdays = (): number[] => {
+    const fromValue = getEffectiveFrom(tempMatchdayMin);
+    return allAvailableMatchdays.filter(md => md >= fromValue);
+  };
+  
+  // Get available matchdays for "From" dropdown (must be <= To)
+  const getAvailableFromMatchdays = (): number[] => {
+    const toValue = getEffectiveTo(tempMatchdayMax);
+    return allAvailableMatchdays.filter(md => md <= toValue);
+  };
+  
+  // Handle team selection change (using temp state)
+  const handleTeamSelectionChange = (teamId: number, checked: boolean) => {
+    if (checked) {
+      setTempTeamIds([...tempTeamIds, teamId]);
+      setTeamSelectionError(false);
+    } else {
+      const newTeamIds = tempTeamIds.filter(id => id !== teamId);
+      setTempTeamIds(newTeamIds);
+      // Show error if this was the last team
+      if (newTeamIds.length === 0) {
+        setTeamSelectionError(true);
+      } else {
+        setTeamSelectionError(false);
+      }
+    }
+  };
+  
+  // Handle matchday change (using temp state)
+  const handleMatchdayFromChange = (value: string) => {
+    const newValue: MdValue = parseInt(value);
+    setTempMatchdayMin(newValue);
+    setMatchdayRangeError(false);
+    // If new From > To, clamp To to From
+    const newEffectiveFrom = getEffectiveFrom(newValue);
+    const currentEffectiveTo = getEffectiveTo(tempMatchdayMax);
+    if (newEffectiveFrom > currentEffectiveTo) {
+      setTempMatchdayMax(newValue);
+    }
+  };
+  
+  const handleMatchdayToChange = (value: string) => {
+    const newValue: MdValue = parseInt(value);
+    setTempMatchdayMax(newValue);
+    setMatchdayRangeError(false);
+    // If new To < From, clamp From to To
+    const newEffectiveTo = getEffectiveTo(newValue);
+    const currentEffectiveFrom = getEffectiveFrom(tempMatchdayMin);
+    if (newEffectiveTo < currentEffectiveFrom) {
+      setTempMatchdayMin(newValue);
+    }
+  };
+  
+  // Handle increment/decrement for From
+  const handleFromIncrement = () => {
+    const currentValue = tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin;
+    const availableFrom = getAvailableFromMatchdays();
+    const currentIndex = availableFrom.indexOf(currentValue);
+    if (currentIndex < availableFrom.length - 1) {
+      handleMatchdayFromChange(availableFrom[currentIndex + 1].toString());
+    }
+  };
+  
+  const handleFromDecrement = () => {
+    const currentValue = tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin;
+    const availableFrom = getAvailableFromMatchdays();
+    const currentIndex = availableFrom.indexOf(currentValue);
+    if (currentIndex > 0) {
+      handleMatchdayFromChange(availableFrom[currentIndex - 1].toString());
+    }
+  };
+  
+  // Handle increment/decrement for To
+  const handleToIncrement = () => {
+    const currentValue = tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax;
+    const availableTo = getAvailableToMatchdays();
+    const currentIndex = availableTo.indexOf(currentValue);
+    if (currentIndex < availableTo.length - 1) {
+      handleMatchdayToChange(availableTo[currentIndex + 1].toString());
+    }
+  };
+  
+  const handleToDecrement = () => {
+    const currentValue = tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax;
+    const availableTo = getAvailableToMatchdays();
+    const currentIndex = availableTo.indexOf(currentValue);
+    if (currentIndex > 0) {
+      handleMatchdayToChange(availableTo[currentIndex - 1].toString());
+    }
+  };
+  
+  // Handle apply filters - apply temp values to applied values
+  const handleApplyFilters = () => {
+    if (!isFilterValid()) {
+      // Scroll to error or shake
+      if (tempTeamIds.length === 0) {
+        setTeamSelectionError(true);
+      }
+      if (effectiveFrom > effectiveTo) {
+        setMatchdayRangeError(true);
+      }
+      return;
+    }
+    // Apply the temp filters to the actual filters
+    setAppliedMatchdayMin(tempMatchdayMin);
+    setAppliedMatchdayMax(tempMatchdayMax);
+    setAppliedTeamIds([...tempTeamIds]);
+    setShowEditPanel(false);
+    setTeamSelectionError(false);
+    setMatchdayRangeError(false);
+  };
+  
+  // Handle reset (reset temp values)
+  const handleReset = () => {
+    setTempTeamIds([...allSortedTeamIds]);
+    setTempMatchdayMin('all');
+    setTempMatchdayMax('all');
+    setTeamSelectionError(false);
+    setMatchdayRangeError(false);
+  };
+  
+  // Handle close panel (discard changes)
+  const handleClosePanel = () => {
+    setShowEditPanel(false);
+    // Reset temp values to current applied values (discard changes)
+    setTempMatchdayMin(appliedMatchdayMin);
+    setTempMatchdayMax(appliedMatchdayMax);
+    setTempTeamIds([...appliedTeamIds]);
+    setTeamSelectionError(false);
+    setMatchdayRangeError(false);
+  };
+  
+  // Apply matchday filter (use appliedMatchdayMin/Max, not temp)
+  const allMatchdays = allAvailableMatchdays.filter(matchday => {
+    const effectiveFrom = getEffectiveFrom(appliedMatchdayMin);
+    const effectiveTo = getEffectiveTo(appliedMatchdayMax);
+    if (matchday < effectiveFrom) return false;
+    if (matchday > effectiveTo) return false;
+    return true;
+  });
   
   // Determine if we should make the points row sticky (only if there are many matchdays)
   const shouldStickyPoints = allMatchdays.length >= 5;
@@ -255,8 +484,6 @@ export default function PredictionSummary({
   const tableScrollHeightClass = shouldStickyPoints
     ? 'max-h-[calc(100vh-115px)]'
     : 'max-h-[calc(100vh-280px)]';
-  const stickyHeaderLineClass = "after:content-[''] after:absolute after:left-0 after:right-0 after:bottom-0 after:h-px after:bg-[#2a2a2a]";
-  const stickyColumnLineClass = "before:content-[''] before:absolute before:top-0 before:bottom-0 before:right-0 before:w-px before:bg-[#2a2a2a]";
   
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -439,13 +666,13 @@ export default function PredictionSummary({
     return (
       <div
         ref={scrollContainerRef}
-        className={`overflow-x-auto overflow-y-auto px-2 ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''}`}
+        className={`overflow-x-auto overflow-y-auto px-2 bg-[#111111] ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''}`}
         style={showRightShadow ? { boxShadow: 'inset -20px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
       >
-        <table className="border-collapse min-w-0 w-auto">
-          <thead className="sticky top-0 z-20">
+        <table className="border-separate border-spacing-0 min-w-0 w-auto bg-[#111111]">
+          <thead className="sticky top-0 z-20 bg-[#111111]">
             <tr>
-              <th className={`relative sticky left-0 z-30 bg-[#111111] px-1 py-2 border-b border-[#2a2a2a] border-r-2 border-[#2a2a2a] ${stickyHeaderLineClass} ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
+              <th className={`sticky left-0 z-30 bg-[#111111] px-1 py-2 border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
                 <div className={`flex flex-col items-center text-center font-bold text-[#f7e479] leading-tight mb-2 ${isMobileSConstrainedView ? 'text-[10px]' : isMobileMConstrainedView ? 'text-xs' : isTabletSmallConstrainedView ? 'text-xs' : 'text-sm'}`}>
                   <span>Forecast</span>
                   <span>Summary</span>
@@ -458,7 +685,7 @@ export default function PredictionSummary({
                 return (
                   <th
                     key={teamId}
-                    className={`relative sticky top-0 z-10 bg-[#111111] px-1 py-2 text-center font-semibold text-primary border-b border-[#2a2a2a] ${stickyHeaderLineClass} ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-xs' : 'text-[10px]'} ${isMobileSConstrainedView ? '' : isMobileMConstrainedView ? '' : (isMobileXLConstrainedView || isMobileLConstrainedView ? '' : 'min-w-[100px]')}`}
+                    className={`sticky top-0 z-10 bg-[#111111] px-1 py-2 text-center font-semibold text-primary border-b border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-xs' : 'text-[10px]'} ${isMobileSConstrainedView ? '' : isMobileMConstrainedView ? '' : (isMobileXLConstrainedView || isMobileLConstrainedView ? '' : 'min-w-[100px]')}`}
                   >
                     <div className="flex flex-col items-center">
                       <div className={isMobileSConstrainedView ? 'relative h-5 w-5 mb-0.5' : getTeamLogoClasses()}>
@@ -480,7 +707,7 @@ export default function PredictionSummary({
             {allMatchdays.map(matchday => (
               <tr key={matchday} className="border-b border-[#2a2a2a]/50 last:border-b-0">
                 <td
-                  className={`relative sticky left-0 z-10 bg-[#111111] px-1 py-2 text-center font-semibold text-white border-r-2 border-[#2a2a2a] ${stickyColumnLineClass} ${isMobileSConstrainedView ? 'text-[8px] w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'text-[9px] w-[75px] min-w-[75px] pr-2 p-0' : 'text-[10px]'} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}
+                  className={`sticky left-0 z-10 bg-[#111111] px-1 py-2 text-center font-semibold text-white border-r border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[8px] w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'text-[9px] w-[75px] min-w-[75px] pr-2 p-0' : 'text-[10px]'} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}
                 >
                   Matchday {matchday}
                 </td>
@@ -534,8 +761,8 @@ export default function PredictionSummary({
             ))}
             
             {/* Total points row */}
-            <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} border-t-2 border-[#2a2a2a]`}>
-              <td className={`relative ${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-1 py-2 text-center font-semibold text-[#f7e479] text-xs border-r-2 border-[#2a2a2a] ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
+            <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''}`}>
+              <td className={`${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-1 py-2 text-center font-semibold text-[#f7e479] text-xs border-r border-[#2a2a2a] border-t border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
                 {'Standings:'}
               </td>
               {sortedTeamIds.map(teamId => {
@@ -543,7 +770,7 @@ export default function PredictionSummary({
                 const position = getTeamPosition(teamId);
                 
                 return (
-                  <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-1 py-2 text-center ${isMobileSConstrainedView ? 'text-[10px]' : 'text-sm'}`}>
+                  <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-1 py-2 text-center border-t border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[10px]' : 'text-sm'}`}>
                     <span className="font-mono font-semibold text-gray-100">{`${position}${position !== '-' ? getOrdinalSuffix(position) : ''} • ${points}`}</span>
                   </td>
                 );
@@ -604,13 +831,13 @@ export default function PredictionSummary({
               // Regular desktop view - original layout
               <div
                 ref={scrollContainerRef}
-                className={`overflow-x-auto overflow-y-auto ${tableScrollHeightClass}`}
+                className={`overflow-x-auto overflow-y-auto bg-[#111111] ${tableScrollHeightClass}`}
                 style={showRightShadow ? { boxShadow: 'inset -25px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
               >
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-20">
+                <table className="w-full border-separate border-spacing-0 bg-[#111111]">
+                  <thead className="sticky top-0 z-20 bg-[#111111]">
                     <tr>
-                      <th className={`relative sticky left-0 z-30 bg-[#111111] px-2 py-3 border-b border-[#2a2a2a] border-r-2 border-[#2a2a2a] ${stickyHeaderLineClass} ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                      <th className={`sticky left-0 z-30 bg-[#111111] px-2 py-3 border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
                         <div className={`flex flex-col items-center text-center font-bold text-[#f7e479] leading-tight mb-2 ${isTabletSmallConstrainedView ? 'text-sm' : 'text-base'}`}>
                           <span>Forecast</span>
                           <span>Summary</span>
@@ -623,7 +850,7 @@ export default function PredictionSummary({
                         return (
                           <th
                             key={teamId}
-                            className={`relative sticky top-0 z-10 bg-[#111111] px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] ${stickyHeaderLineClass} ${isMobileXLConstrainedView ? 'max-w-[70px] min-w-[50px]' : 'min-w-[100px]'}`}
+                            className={`sticky top-0 z-10 bg-[#111111] px-2 py-3 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] ${isMobileXLConstrainedView ? 'max-w-[70px] min-w-[50px]' : 'min-w-[100px]'}`}
                           >
                             <div className="flex flex-col items-center">
                               <div className="relative h-8 w-8 mb-2">
@@ -644,7 +871,7 @@ export default function PredictionSummary({
                   <tbody>
                     {allMatchdays.map(matchday => (
                       <tr key={matchday} className="border-b border-[#2a2a2a]/50 last:border-b-0">
-                        <td className={`relative sticky left-0 z-10 bg-[#111111] px-2 py-3 text-center font-semibold text-white border-r-2 border-[#2a2a2a] text-xs ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                        <td className={`sticky left-0 z-10 bg-[#111111] px-2 py-3 text-center font-semibold text-white border-r border-[#2a2a2a] text-xs ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
                           Matchday {matchday}
                         </td>
                         
@@ -696,8 +923,8 @@ export default function PredictionSummary({
                     ))}
                     
                     {/* Total points row */}
-                    <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} border-t-2 border-[#2a2a2a]`}>
-                      <td className={`relative ${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-2 py-3 text-center font-semibold text-[#f7e479] border-r-2 border-[#2a2a2a] ${stickyColumnLineClass} ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                    <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''}`}>
+                      <td className={`${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-2 py-3 text-center font-semibold text-[#f7e479] border-r border-[#2a2a2a] border-t border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
                         {'Standings:'}
                       </td>
                       {sortedTeamIds.map(teamId => {
@@ -705,7 +932,7 @@ export default function PredictionSummary({
                         const position = getTeamPosition(teamId);
                         
                         return (
-                          <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-2 py-3 text-center`}>
+                          <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-2 py-3 text-center border-t border-[#2a2a2a]`}>
                             <span className="font-mono text-base font-semibold text-gray-100">{`${position}${position !== '-' ? getOrdinalSuffix(position) : ''} • ${points}`}</span>
                           </td>
                         );
@@ -717,13 +944,262 @@ export default function PredictionSummary({
             )}
             
             <div className={getBottomMarginClasses()}>
-              <button
-                onClick={handleClose}
-                className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
-              >
-                Close
-              </button>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => setShowEditPanel(!showEditPanel)}
+                  className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleClose}
+                  className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
+                >
+                  Close
+                </button>
+              </div>
             </div>
+            
+            {/* Edit/Filter Panel */}
+            {showEditPanel && (
+              <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg max-w-[720px] w-full max-h-[90vh] flex flex-col mx-auto">
+                  {/* Header */}
+                  <div className="relative flex justify-center items-center p-6 pb-4">
+                    <h3 className="text-lg font-bold text-white">Filter Summary</h3>
+                    <button
+                      onClick={handleClosePanel}
+                      className="absolute right-6 text-gray-400 hover:text-white text-2xl leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  
+                  {/* Scrollable Content */}
+                  <div className="flex-1 overflow-y-auto px-6">
+                    {/* Matchday Range Filter */}
+                    <div className="pb-6">
+                      <label className="block text-sm font-semibold text-gray-300 mb-3">
+                        Matchday Range
+                      </label>
+                      <div className="flex gap-3">
+                        <div className="w-24">
+                          <label className="block text-xs text-gray-400 mb-1.5">From</label>
+                          <div className="relative" ref={fromDropdownRef}>
+                            <button
+                              ref={fromButtonRef}
+                              type="button"
+                              onClick={() => setOpenDropdown(openDropdown === 'from' ? null : 'from')}
+                              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
+                            >
+                              {tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin}
+                            </button>
+                            <div className="absolute right-0.5 top-0 bottom-0 flex flex-col justify-center pointer-events-none">
+                              <button
+                                type="button"
+                                onClick={handleFromIncrement}
+                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                                onMouseDown={(e) => e.preventDefault()}
+                              >
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleFromDecrement}
+                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                                onMouseDown={(e) => e.preventDefault()}
+                              >
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                            </div>
+                            {openDropdown === 'from' && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded z-50" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                                {getAvailableFromMatchdays().map(md => (
+                                  <button
+                                    key={md}
+                                    type="button"
+                                    onClick={() => {
+                                      handleMatchdayFromChange(md.toString());
+                                      setOpenDropdown(null);
+                                    }}
+                                    className={`w-full px-2.5 py-1 text-sm text-center transition-colors ${
+                                      (tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin) === md
+                                        ? 'bg-[#f7e479]/10 text-[#f7e479]'
+                                        : 'text-white hover:bg-[#f7e479] hover:text-black'
+                                    }`}
+                                  >
+                                    {md}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="w-24">
+                          <label className="block text-xs text-gray-400 mb-1.5">To</label>
+                          <div className="relative" ref={toDropdownRef}>
+                            <button
+                              ref={toButtonRef}
+                              type="button"
+                              onClick={() => setOpenDropdown(openDropdown === 'to' ? null : 'to')}
+                              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
+                            >
+                              {tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax}
+                            </button>
+                            <div className="absolute right-0.5 top-0 bottom-0 flex flex-col justify-center pointer-events-none">
+                              <button
+                                type="button"
+                                onClick={handleToIncrement}
+                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                                onMouseDown={(e) => e.preventDefault()}
+                              >
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleToDecrement}
+                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                                onMouseDown={(e) => e.preventDefault()}
+                              >
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                            </div>
+                            {openDropdown === 'to' && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded z-50" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                                {getAvailableToMatchdays().map(md => (
+                                  <button
+                                    key={md}
+                                    type="button"
+                                    onClick={() => {
+                                      handleMatchdayToChange(md.toString());
+                                      setOpenDropdown(null);
+                                    }}
+                                    className={`w-full px-2.5 py-1 text-sm text-center transition-colors ${
+                                      (tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax) === md
+                                        ? 'bg-[#f7e479]/10 text-[#f7e479]'
+                                        : 'text-white hover:bg-[#f7e479] hover:text-black'
+                                    }`}
+                                  >
+                                    {md}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {matchdayRangeError && (
+                        <p className="text-xs text-red-400 mt-2">Invalid range: From cannot be greater than To.</p>
+                      )}
+                    </div>
+                    
+                    {/* Separator */}
+                    <div className="border-b border-white/8 mb-6"></div>
+                    
+                    {/* Team Filter */}
+                    <div className={`pb-6 ${teamSelectionError ? 'border-l-2 border-red-500 pl-4 -ml-6' : ''}`}>
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2">
+                          <label className={`block text-sm font-semibold ${teamSelectionError ? 'text-red-400' : 'text-gray-300'}`}>
+                            Select Teams:
+                          </label>
+                          <span className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs text-gray-300">
+                            {tempTeamIds.length}/{allSortedTeamIds.length}
+                          </span>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => {
+                              setTempTeamIds([...allSortedTeamIds]);
+                              setTeamSelectionError(false);
+                            }}
+                            className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-gray-600">·</span>
+                          <button
+                            onClick={() => {
+                              setTempTeamIds([]);
+                              setTeamSelectionError(true);
+                            }}
+                            className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5 max-h-96 overflow-y-auto">
+                        {allSortedTeamIds.map(teamId => {
+                          const team = getTeamDetails(teamId);
+                          if (!team) return null;
+                          const isSelected = tempTeamIds.includes(teamId);
+                          
+                          return (
+                            <label
+                              key={teamId}
+                              className={`flex flex-col items-center p-1.5 rounded cursor-pointer transition-all ${
+                                isSelected 
+                                  ? 'bg-[#f7e479]/5 border border-[#f7e479]/50' 
+                                  : 'bg-transparent border border-white/10 hover:border-white/20'
+                              }`}
+                            >
+                              <div className="relative w-8 h-8 mb-1">
+                                <Image
+                                  src={team.crest || "/placeholder-team.png"}
+                                  alt={team.name}
+                                  fill
+                                  className="object-contain"
+                                />
+                              </div>
+                              <span className={`text-[9px] text-center leading-tight ${isSelected ? 'text-[#f7e479]/80' : 'text-white'}`}>{team.shortName || team.name}</span>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => handleTeamSelectionChange(teamId, e.target.checked)}
+                                className="sr-only"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {teamSelectionError && (
+                        <p className="text-xs text-red-400 mt-2">Select at least one team to update the summary.</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Bottom Action Bar */}
+                  <div className="border-t border-white/8 p-4 flex gap-3">
+                    <button
+                      onClick={handleReset}
+                      className="flex-1 px-4 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-md text-white text-sm font-medium hover:bg-[#2a2a2a] transition-colors"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={handleApplyFilters}
+                      disabled={!isFilterValid()}
+                      className={`flex-1 px-4 py-2.5 rounded-md font-semibold text-sm transition-colors ${
+                        isFilterValid()
+                          ? 'bg-[#f7e479] text-black hover:bg-yellow-400'
+                          : 'bg-[#2a2a2a] text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
