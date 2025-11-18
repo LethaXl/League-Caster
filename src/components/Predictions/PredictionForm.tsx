@@ -156,6 +156,10 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     
     if (!isRaceMode || selectedTeamIds.length === 0) {
       console.log("Not filtering matches - race mode disabled or no teams selected");
+      // Clear isHeadToHead from all matches when not in race mode
+      matches.forEach(match => {
+        match.isHeadToHead = false;
+      });
       return matches;
     }
     
