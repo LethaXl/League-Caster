@@ -154,6 +154,8 @@ export default function PredictionSummary({
     }, 300); // Match animation duration
   };
   
+  const isCompactFilterLayout = screenWidth > 0 && screenWidth < 450;
+  
   // Determine if we're in different constraint views
   const isMobileSConstrainedView = screenWidth >= 320 && screenWidth < 360;
   const isMobileMConstrainedView = screenWidth >= 360 && screenWidth < 390;
@@ -189,9 +191,57 @@ export default function PredictionSummary({
     });
   }, [matches, predictions]);
   
+  type TeamNameLike = {
+    name?: string | null;
+    shortName?: string | null;
+  };
+  
   // Get team details from standings
   const getTeamDetails = (teamId: number) => {
     return standings.find(s => s.team.id === teamId)?.team;
+  };
+
+  // Get league logo based on matches
+  const getLeagueLogo = () => {
+    if (matches.length === 0) return '/premierleague.png'; // default
+    // Try to infer league from first match's competition if available
+    // For now, use a default - can be enhanced later with leagueCode prop
+    return '/premierleague.png';
+  };
+
+  const getFriendlyTeamName = (name: string | null | undefined): string => {
+    if (!name) return 'Unknown Team';
+    if (name === 'Wolverhampton Wanderers FC') return 'Wolves';
+    if (name === 'RCD Espanyol de Barcelona') return 'RCD Espanyol';
+    if (name === 'Club Atlético de Madrid') return 'Atletico Madrid';
+    if (name === 'Brighton & Hove Albion FC') return 'Brighton & Hove Albion';
+    if (name === 'Real Sociedad de Fútbol') return 'Real Sociedad';
+    return name;
+  };
+
+  const getResponsiveTeamName = (team: TeamNameLike | undefined, showFullName = false) => {
+    const baseName = team?.shortName || getFriendlyTeamName(team?.name) || 'Unknown Team';
+    
+    // If showFullName is true (e.g., when 3 teams selected), return full name
+    if (showFullName) {
+      return baseName;
+    }
+    
+    if (!screenWidth || screenWidth >= 450) {
+      return baseName;
+    }
+
+    if (screenWidth >= 320 && screenWidth < 340) {
+      return baseName.length > 4 ? `${baseName.substring(0, 3)}...` : baseName;
+    }
+    if (screenWidth >= 340 && screenWidth < 375) {
+      return baseName.length > 6 ? `${baseName.substring(0, 4)}...` : baseName;
+    }
+    if (screenWidth >= 375 && screenWidth < 450) {
+      return baseName.length > 8 ? `${baseName.substring(0, 6)}...` : baseName;
+    }
+
+    return baseName;
   };
   
   // Get team points from standings
@@ -499,6 +549,7 @@ export default function PredictionSummary({
     if (matchday > effectiveTo) return false;
     return true;
   });
+  const shouldCenterSummaryLayout = (sortedTeamIds.length <= 4 || allMatchdays.length < 7) && !(isTabletSmallConstrainedView || isMediumConstrainedView);
   
   // Determine if we should make the points row sticky (only if there are many matchdays)
   const shouldStickyPoints = allMatchdays.length >= 5;
@@ -521,7 +572,7 @@ export default function PredictionSummary({
     container.addEventListener('scroll', updateShadow);
     return () => container.removeEventListener('scroll', updateShadow);
   }, [screenWidth, viewMode, shouldStickyPoints]);
-
+  
   // Group matches by matchday and team
   const matchesByMatchdayAndTeam = new Map<number, Map<number, Match[]>>();
   
@@ -610,6 +661,8 @@ export default function PredictionSummary({
     return "text-2xl font-bold text-[#f7e479]";
   };
   
+  const shouldUseCompactActionButtons = false;
+  
   // Button classes
   const getButtonClasses = () => {
     if (isMobileSConstrainedView || isMobileMConstrainedView) {
@@ -636,6 +689,259 @@ export default function PredictionSummary({
     // Default for larger screens
     return "px-8 py-2 bg-transparent text-[#f7e479] border border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold";
   };
+
+  const getEditActionButtonClasses = () => `${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`;
+
+  const getCloseActionButtonClasses = () => `${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`;
+
+  const getActionButtonsWrapperClasses = () => "flex gap-2 justify-center";
+
+  const renderMatchdayRangeSection = (isCompactLayout = false) => (
+    <div className={`${isCompactLayout ? 'w-full' : 'flex-1'}`}>
+      <label className="block text-sm font-semibold text-gray-300 mb-3">
+        Matchday Range
+      </label>
+      <div className="flex gap-3">
+        <div className="w-24">
+          <label className="block text-xs text-gray-400 mb-1.5">From</label>
+          <div className="relative" ref={fromDropdownRef}>
+            <button
+              ref={fromButtonRef}
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === 'from' ? null : 'from')}
+              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
+            >
+              {tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin}
+            </button>
+            <div className="absolute right-0.5 top-0 bottom-0 flex flex-col justify-center pointer-events-none">
+              <button
+                type="button"
+                onClick={handleFromIncrement}
+                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleFromDecrement}
+                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            {openDropdown === 'from' && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded z-50" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                {getAvailableFromMatchdays().map(md => (
+                  <button
+                    key={md}
+                    type="button"
+                    onClick={() => {
+                      handleMatchdayFromChange(md.toString());
+                      setOpenDropdown(null);
+                    }}
+                    className={`w-full px-2.5 py-1 text-sm text-center transition-colors ${
+                      (tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin) === md
+                        ? 'bg-[#f7e479]/10 text-[#f7e479]'
+                        : 'text-white hover:bg-[#f7e479] hover:text-black'
+                    }`}
+                  >
+                    {md}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="w-24">
+          <label className="block text-xs text-gray-400 mb-1.5">To</label>
+          <div className="relative" ref={toDropdownRef}>
+            <button
+              ref={toButtonRef}
+              type="button"
+              onClick={() => setOpenDropdown(openDropdown === 'to' ? null : 'to')}
+              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
+            >
+              {tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax}
+            </button>
+            <div className="absolute right-0.5 top-0 bottom-0 flex flex-col justify-center pointer-events-none">
+              <button
+                type="button"
+                onClick={handleToIncrement}
+                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleToDecrement}
+                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            {openDropdown === 'to' && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded z-50" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                {getAvailableToMatchdays().map(md => (
+                  <button
+                    key={md}
+                    type="button"
+                    onClick={() => {
+                      handleMatchdayToChange(md.toString());
+                      setOpenDropdown(null);
+                    }}
+                    className={`w-full px-2.5 py-1 text-sm text-center transition-colors ${
+                      (tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax) === md
+                        ? 'bg-[#f7e479]/10 text-[#f7e479]'
+                        : 'text-white hover:bg-[#f7e479] hover:text-black'
+                    }`}
+                  >
+                    {md}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {matchdayRangeError && (
+        <p className="text-xs text-red-400 mt-2">Invalid range: From cannot be greater than To.</p>
+      )}
+    </div>
+  );
+
+  const renderDisplayOptionsSection = (isCompactLayout = false) => (
+    <div className={`${isCompactLayout ? 'w-full' : 'flex-1'}`}>
+      <label className="block text-sm font-semibold text-gray-300 mb-3">
+        Display Options
+      </label>
+      <div className={`space-y-2 ${displayOptionsError ? 'border-l-2 border-red-500 pl-4 -ml-6' : ''}`}>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={tempShowPosition}
+            onChange={(e) => {
+              const newValue = e.target.checked;
+              if (!newValue && !tempShowPoints) { return; }
+              setTempShowPosition(newValue);
+              setDisplayOptionsError(false);
+            }}
+            className={`w-5 h-5 border-0 rounded appearance-none focus:ring-0 focus:ring-offset-0 cursor-pointer relative ${tempShowPosition ? 'bg-[#f7e479]' : 'bg-[#1a1a1a] border border-[#2a2a2a]'}`}
+            style={{
+              backgroundImage: tempShowPosition ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z' fill='%23000000'/%3E%3C/svg%3E")` : 'none',
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center'
+            }}
+          />
+          <span className={`text-sm ${displayOptionsError ? 'text-red-400' : 'text-gray-300'}`}>Position (1st)</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={tempShowPoints}
+            onChange={(e) => {
+              const newValue = e.target.checked;
+              if (!newValue && !tempShowPosition) { return; }
+              setTempShowPoints(newValue);
+              setDisplayOptionsError(false);
+            }}
+            className={`w-5 h-5 border-0 rounded appearance-none focus:ring-0 focus:ring-offset-0 cursor-pointer relative ${tempShowPoints ? 'bg-[#f7e479]' : 'bg-[#1a1a1a] border border-[#2a2a2a]'}`}
+            style={{
+              backgroundImage: tempShowPoints ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z' fill='%23000000'/%3E%3C/svg%3E")` : 'none',
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center'
+            }}
+          />
+          <span className={`text-sm ${displayOptionsError ? 'text-red-400' : 'text-gray-300'}`}>Points (17 Pts)</span>
+        </label>
+        {displayOptionsError && (
+          <p className="text-xs text-red-400 mt-2">Select at least one display option.</p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderTeamSelectionSection = (isCompactLayout = false) => (
+    <div className={`${isCompactLayout ? 'pb-4' : 'pb-6'} ${teamSelectionError ? 'border-l-2 border-red-500 pl-4 -ml-6' : ''}`}>
+      <div className={`flex justify-between items-center ${isCompactLayout ? 'mb-3' : 'mb-4'}`}>
+        <div className="flex items-center gap-2">
+          <label className={`block text-sm font-semibold ${teamSelectionError ? 'text-red-400' : 'text-gray-300'}`}>
+            Select Teams:
+          </label>
+          <span className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs text-gray-300">
+            {tempTeamIds.length}/{allSortedTeamIds.length}
+          </span>
+        </div>
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={() => {
+              setTempTeamIds([...allSortedTeamIds]);
+              setTeamSelectionError(false);
+            }}
+            className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+          >
+            Select All
+          </button>
+          <span className="text-gray-600">·</span>
+          <button
+            onClick={() => {
+              setTempTeamIds([]);
+              setTeamSelectionError(true);
+            }}
+            className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-5 gap-1.5 max-h-96 overflow-y-auto">
+        {allSortedTeamIds.map(teamId => {
+          const team = getTeamDetails(teamId);
+          if (!team) return null;
+          const isSelected = tempTeamIds.includes(teamId);
+          return (
+            <label
+              key={teamId}
+              className={`flex flex-col items-center p-1.5 rounded cursor-pointer transition-all ${
+                isSelected
+                  ? 'bg-[#f7e479]/5 border border-[#f7e479]/50'
+                  : 'bg-transparent border border-white/10 hover:border-white/20'
+              }`}
+            >
+              <div className="relative w-8 h-8 mb-1">
+                <Image src={team.crest || "/placeholder-team.png"} alt={team.name} fill className="object-contain" />
+              </div>
+              <span className={`text-[9px] text-center leading-tight ${isSelected ? 'text-[#f7e479]/80' : 'text-white'}`}>
+                {getResponsiveTeamName(team)}
+              </span>
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={(e) => handleTeamSelectionChange(teamId, e.target.checked)}
+                className="sr-only"
+              />
+            </label>
+          );
+        })}
+      </div>
+      {teamSelectionError && (
+        <p className="text-xs text-red-400 mt-2">Select at least one team to update the summary.</p>
+      )}
+    </div>
+  );
   
   // Team logo size classes
   const getTeamLogoClasses = () => {
@@ -682,35 +988,94 @@ export default function PredictionSummary({
     return "mt-6 flex justify-center";
   };
   
+  // Ensure scroll container is at left position when 4-6 teams are selected
+  useEffect(() => {
+    if ((sortedTeamIds.length === 4 || sortedTeamIds.length === 5 || sortedTeamIds.length === 6) && (isTabletSmallConstrainedView || isMediumConstrainedView)) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollLeft = 0;
+      }
+    }
+  }, [sortedTeamIds.length, isTabletSmallConstrainedView, isMediumConstrainedView]);
+
+  // Helper function to get tablet width (auto-adjusts based on screen width and team count)
+  const getTabletWidth = (teamCount: number): number | null => {
+    if (!(isTabletSmallConstrainedView || isMediumConstrainedView) || !screenWidth) {
+      return null;
+    }
+    
+    // MD column width (sticky left column)
+    const mdColumnWidth = isTabletSmallConstrainedView ? 70 : 75;
+    
+    // Account for padding and margins (left + right padding, scrollbar, etc.)
+    const horizontalPadding = 32; // 16px on each side
+    const scrollbarWidth = 8;
+    
+    // Calculate available width for team columns
+    const availableWidth = screenWidth - mdColumnWidth - horizontalPadding - scrollbarWidth;
+    
+    // Calculate base width per team
+    const baseWidth = availableWidth / teamCount;
+    
+    // Apply min/max constraints for readability
+    // Min: 35px (too small and content won't fit)
+    // Max: 90px (too wide and looks stretched)
+    const minWidth = 35;
+    const maxWidth = 90;
+    
+    // Clamp the width
+    const clampedWidth = Math.max(minWidth, Math.min(maxWidth, baseWidth));
+    
+    // Round to nearest pixel
+    return Math.round(clampedWidth);
+  };
+  
   // Render mobile optimization for the forecast summary
   const renderMobileView = () => {
-    // For all mobile sizes, show the summary table (remove the special message for isMobileSConstrainedView)
     return (
-      <div
-        ref={scrollContainerRef}
-        className={`overflow-x-auto overflow-y-auto px-2 bg-[#111111] ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''}`}
-        style={showRightShadow ? { boxShadow: 'inset -20px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
-      >
-        <table className="border-separate border-spacing-0 min-w-0 w-auto bg-[#111111]">
+      <div className={shouldCenterSummaryLayout ? 'flex flex-col items-center justify-center w-full min-h-[80vh]' : ''}>
+        {/* Forecast Summary Heading */}
+        <h2 className={`text-center font-bold text-[#f7e479] mb-4 ${isMobileSConstrainedView ? 'text-base' : isMobileMConstrainedView ? 'text-lg' : 'text-xl'}`}>
+          Forecast Summary
+        </h2>
+        <div
+          ref={scrollContainerRef}
+          className={`overflow-x-auto overflow-y-auto bg-[#111111] ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''} ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length > 3 && allMatchdays.length < 7 ? 'w-full' : ''}`}
+          style={showRightShadow ? { boxShadow: 'inset -20px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
+        >
+        <div className="pl-0 pr-2">
+        <table className="border-separate border-spacing-0 w-auto bg-[#111111]">
           <thead className="sticky top-0 z-20 bg-[#111111]">
             <tr>
-              <th className={`sticky left-0 z-30 bg-[#111111] px-1 py-1.5 border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
-                <div className={`flex flex-col items-center text-center font-bold text-[#f7e479] leading-tight ${isMobileSConstrainedView ? 'text-[10px]' : isMobileMConstrainedView ? 'text-xs' : isTabletSmallConstrainedView ? 'text-xs' : 'text-sm'}`}>
-                  <span>Forecast</span>
-                  <span>Summary</span>
+              <th className={`sticky left-0 z-30 bg-[#111111] px-0 py-1.5 border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[70px] min-w-[70px] max-w-[70px]' : isMediumConstrainedView ? 'w-[75px] min-w-[75px] max-w-[75px]' : isMobileSConstrainedView ? 'w-[40px] min-w-[40px] max-w-[40px]' : isMobileMConstrainedView ? 'w-[42px] min-w-[42px] max-w-[42px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[45px] min-w-[45px] max-w-[45px]' : 'min-w-[45px] max-w-[45px]'}`} style={{ boxShadow: '4px 0 8px rgba(0,0,0,0.8), 2px 0 4px rgba(0,0,0,0.6)' }}>
+                <div className="flex items-center justify-center">
+                  <div className={`${isMobileSConstrainedView ? 'relative h-8 w-8' : isMobileMConstrainedView ? 'relative h-9 w-9' : 'relative h-10 w-10'}`}>
+                    <Image
+                      src={getLeagueLogo()}
+                      alt="League"
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
                 </div>
               </th>
-              {sortedTeamIds.map(teamId => {
+              {sortedTeamIds.map((teamId, index) => {
                 const team = getTeamDetails(teamId);
                 if (!team) return null;
+                const isFirstTeam = index === 0 && (sortedTeamIds.length === 4 || sortedTeamIds.length === 5 || sortedTeamIds.length === 6);
+                const tabletWidth = getTabletWidth(sortedTeamIds.length);
+                const isMobileView = isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView;
                 
                 return (
                   <th
                     key={teamId}
-                    className={`sticky top-0 z-10 bg-[#111111] px-1 py-1.5 text-center font-semibold text-primary border-b border-[#2a2a2a] whitespace-nowrap ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-xs' : 'text-[10px]'}`}
+                    className={`sticky top-0 ${isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'z-31' : 'z-25'} bg-[#111111] px-1 py-1.5 text-center border-b border-[#2a2a2a] whitespace-nowrap ${isMobileView ? '' : sortedTeamIds.length <= 2 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[85px]' : 'min-w-[130px]') : sortedTeamIds.length === 3 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[70px]' : 'min-w-[110px]') : sortedTeamIds.length >= 4 && sortedTeamIds.length <= 10 ? '' : sortedTeamIds.length > 10 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]') : (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]')}`}
+                    style={{
+                      ...(isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? { zIndex: 31 } : {}),
+                      ...(!isMobileView && tabletWidth ? { width: `${tabletWidth}px`, minWidth: `${tabletWidth}px`, maxWidth: `${tabletWidth}px` } : {})
+                    }}
                   >
-                    <div className="flex flex-col items-center">
-                      <div className={isMobileSConstrainedView ? 'relative h-5 w-5 mb-0.5' : getTeamLogoClasses()}>
+                    <div className={`flex flex-col items-center justify-center ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView ? 'w-full min-w-0' : ''}`}>
+                      <div className={isMobileSConstrainedView ? 'relative h-6 w-6 mb-0.5' : isMobileMConstrainedView ? 'relative h-7 w-7 mb-0.5' : 'relative h-8 w-8 mb-1'}>
                         <Image
                           src={team.crest || "/placeholder-team.png"}
                           alt={team.name}
@@ -718,7 +1083,7 @@ export default function PredictionSummary({
                           className="object-contain"
                         />
                       </div>
-                      <span className={isMobileSConstrainedView ? 'text-[8px]' : 'text-[10px]'}>{team.shortName || team.name || 'Unknown Team'}</span>
+                      <span className={`${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : 'text-[10px]'} ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView ? 'truncate w-full text-center' : ''}`} style={(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView && tabletWidth ? { maxWidth: `${tabletWidth - 8}px` } : undefined}>{getResponsiveTeamName(team, sortedTeamIds.length <= 2)}</span>
                     </div>
                   </th>
                 );
@@ -729,19 +1094,27 @@ export default function PredictionSummary({
             {allMatchdays.map(matchday => (
               <tr key={matchday}>
                 <td
-                  className={`sticky left-0 z-10 bg-[#111111] px-1 py-1 text-center font-semibold text-white border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[8px] w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'text-[9px] w-[75px] min-w-[75px] pr-2 p-0' : 'text-[10px]'} ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}
+                  className={`sticky left-0 z-10 bg-[#111111] px-0 py-1 text-center font-semibold text-white border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[9px] w-[40px] min-w-[40px] max-w-[40px]' : isMobileMConstrainedView ? 'text-[10px] w-[42px] min-w-[42px] max-w-[42px]' : 'text-xs'} ${isTabletSmallConstrainedView ? 'w-[70px] min-w-[70px] max-w-[70px]' : isMediumConstrainedView ? 'w-[75px] min-w-[75px] max-w-[75px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[45px] min-w-[45px] max-w-[45px]' : 'min-w-[45px] max-w-[45px]'}`}
+                  style={{ boxShadow: '4px 0 8px rgba(0,0,0,0.8), 2px 0 4px rgba(0,0,0,0.6)' }}
                 >
-                  Matchday {matchday}
+                  MD{matchday}
                 </td>
                 
-                {sortedTeamIds.map(teamId => {
+                {sortedTeamIds.map((teamId, index) => {
                   const teamMatches = matchesByMatchdayAndTeam.get(matchday)?.get(teamId) || [];
+                  const isFirstTeam = index === 0 && (sortedTeamIds.length === 4 || sortedTeamIds.length === 5 || sortedTeamIds.length === 6);
+                  const tabletWidth = getTabletWidth(sortedTeamIds.length);
+                  const isMobileView = isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView;
                   
                   return (
                     <td
                       key={`${matchday}-${teamId}`}
-                      className={`px-1 py-1 align-top border-b border-[#2a2a2a] ${isMobileXLConstrainedView || isMobileLConstrainedView || isMobileMConstrainedView || isMobileSConstrainedView ? 'p-0' : ''}`}
-                      style={isMobileXLConstrainedView || isMobileLConstrainedView || isMobileMConstrainedView || isMobileSConstrainedView ? {width: '1%'} : {}}
+                      className={`px-1 py-1 align-top border-b border-[#2a2a2a] ${isMobileView ? 'p-0' : ''} ${isMobileView ? '' : sortedTeamIds.length <= 2 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[85px]' : 'min-w-[130px]') : sortedTeamIds.length === 3 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[70px]' : 'min-w-[110px]') : sortedTeamIds.length >= 4 && sortedTeamIds.length <= 10 ? '' : sortedTeamIds.length > 10 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]') : (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]')}`}
+                      style={{
+                        ...(isMobileView ? { width: '1%' } : {}),
+                        ...(isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? { zIndex: 11 } : {}),
+                        ...(!isMobileView && tabletWidth ? { width: `${tabletWidth}px`, minWidth: `${tabletWidth}px`, maxWidth: `${tabletWidth}px` } : {})
+                      }}
                     >
                       {teamMatches.length > 0 ? (
                         <div className="space-y-0.5">
@@ -753,14 +1126,14 @@ export default function PredictionSummary({
                             return (
                               <div
                                 key={match.id}
-                                className={`flex items-center justify-start text-[10px] p-1 rounded ${getResultBgColorClass(match, prediction, teamId)} select-none relative`}
+                                className={`flex items-center justify-center gap-0.5 p-1 rounded ${getResultBgColorClass(match, prediction, teamId)} select-none relative`}
                                 style={isMobileTapExpand ? {minWidth: 0, maxWidth: '100vw'} : {}}
                               >
-                                <div className="flex items-center justify-start relative">
-                                  <span className="text-white text-[8px] font-medium mr-0.5 min-w-[16px]">
+                                <div className="flex items-center justify-center relative gap-0.5">
+                                  <span className={`text-white font-medium ${isMobileSConstrainedView ? 'text-[7px]' : isMobileMConstrainedView ? 'text-[8px]' : 'text-[9px]'}`}>
                                     {isHome ? 'H' : 'A'}
                                   </span>
-                                  <div className={getMatchTeamLogoClasses()}>
+                                  <div className={`${isMobileSConstrainedView ? 'relative h-5 w-5' : isMobileMConstrainedView ? 'relative h-6 w-6' : 'relative h-7 w-7'}`}>
                                     <Image
                                       src={opponent.crest || "/placeholder-team.png"}
                                       alt={opponent.name}
@@ -768,9 +1141,6 @@ export default function PredictionSummary({
                                       className="object-contain"
                                     />
                                   </div>
-                                  <span className="text-white text-[8px] ml-0.5 truncate">
-                                    {opponent.shortName || opponent.name}
-                                  </span>
                                 </div>
                               </div>
                             );
@@ -786,34 +1156,54 @@ export default function PredictionSummary({
             ))}
             
             {/* Total points row */}
-            <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20 bg-[#111111]' : ''}`}>
-              <td className={`${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-1 py-2 text-center font-semibold text-[#f7e479] text-xs border-r border-[#2a2a2a] border-t border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[80px] min-w-[80px]' : isMobileSConstrainedView ? 'w-[70px] min-w-[70px] pr-1 p-0' : isMobileMConstrainedView ? 'w-[75px] min-w-[75px] pr-2 p-0' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[80px] min-w-[80px] pr-4 p-0' : 'min-w-[80px]'}`}>
-                {'Standings:'}
+            <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20 bg-[#111111]' : ''}`} style={shouldStickyPoints ? { boxShadow: '0 -4px 10px rgba(0,0,0,0.8)' } : undefined}>
+              <td className={`${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-0 py-2 text-center font-semibold text-[#f7e479] text-xs border-r border-[#2a2a2a] border-t border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[70px] min-w-[70px] max-w-[70px]' : isMediumConstrainedView ? 'w-[75px] min-w-[75px] max-w-[75px]' : isMobileSConstrainedView ? 'w-[40px] min-w-[40px] max-w-[40px]' : isMobileMConstrainedView ? 'w-[42px] min-w-[42px] max-w-[42px]' : (isMobileXLConstrainedView || isMobileLConstrainedView) ? 'w-[45px] min-w-[45px] max-w-[45px]' : 'min-w-[45px] max-w-[45px]'}`} style={shouldStickyPoints ? { boxShadow: '4px -2px 8px rgba(0,0,0,0.8), 2px -2px 4px rgba(0,0,0,0.6), 4px 0 8px rgba(0,0,0,0.8), 2px 0 4px rgba(0,0,0,0.6)' } : { boxShadow: '4px 0 8px rgba(0,0,0,0.8), 2px 0 4px rgba(0,0,0,0.6)' }}>
+                <div className="flex items-center justify-center w-full h-full">
+                  <span className={`${isMobileSConstrainedView ? 'text-[6px]' : isMobileMConstrainedView ? 'text-[7px]' : 'text-[8px]'} whitespace-nowrap`}>Standings:</span>
+                </div>
               </td>
-              {sortedTeamIds.map(teamId => {
+              {sortedTeamIds.map((teamId, index) => {
                 const points = getTeamPoints(teamId);
                 const position = getTeamPosition(teamId);
-                
-                let displayText = '';
-                if (appliedShowPosition && appliedShowPoints) {
-                  displayText = `${position}${position !== '-' ? getOrdinalSuffix(position) : ''} • ${points} Pts`;
-                } else if (appliedShowPosition) {
-                  displayText = `${position}${position !== '-' ? getOrdinalSuffix(position) : ''}`;
-                } else if (appliedShowPoints) {
-                  displayText = `${points} Pts`;
-                } else {
-                  displayText = '-';
-                }
+                const isFirstTeam = index === 0 && (sortedTeamIds.length === 4 || sortedTeamIds.length === 5 || sortedTeamIds.length === 6);
+                const tabletWidth = getTabletWidth(sortedTeamIds.length);
+                const isMobileView = isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView;
                 
                 return (
-                  <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-1 py-2 text-center border-t border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[10px]' : 'text-sm'}`}>
-                    <span className="font-mono font-semibold text-gray-100">{displayText}</span>
+                  <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-1 py-2 text-center border-t border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[10px]' : 'text-sm'} ${isMobileView ? '' : sortedTeamIds.length <= 2 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[85px]' : 'min-w-[130px]') : sortedTeamIds.length === 3 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[70px]' : 'min-w-[110px]') : sortedTeamIds.length >= 4 && sortedTeamIds.length <= 10 ? '' : sortedTeamIds.length > 10 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]') : (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]')}`} style={{
+                    ...(shouldStickyPoints ? { boxShadow: '0 -2px 4px rgba(0,0,0,0.5)' } : {}),
+                    ...(isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? { zIndex: shouldStickyPoints ? 31 : 11 } : {}),
+                    ...(!isMobileView && tabletWidth ? { width: `${tabletWidth}px`, minWidth: `${tabletWidth}px`, maxWidth: `${tabletWidth}px` } : {})
+                  }}>
+                    {appliedShowPosition && appliedShowPoints ? (
+                      <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                        <span className={`font-mono font-semibold text-gray-100 ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'text-[9px]' : 'text-[10px]'}`}>
+                          {position !== '-' ? `${position}${getOrdinalSuffix(position)}` : '-'}
+                        </span>
+                        <span className={`text-gray-400 ${isMobileSConstrainedView ? 'text-[10px]' : isMobileMConstrainedView ? 'text-[11px]' : (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'text-[11px]' : 'text-[12px]'}`}>·</span>
+                        <span className={`font-mono font-semibold text-gray-100 ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'text-[9px]' : 'text-[10px]'}`}>
+                          {points} Pts
+                        </span>
+                      </div>
+                    ) : appliedShowPosition ? (
+                      <span className={`font-mono font-semibold text-gray-100 ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'text-[9px]' : 'text-[10px]'}`}>
+                        {position !== '-' ? `${position}${getOrdinalSuffix(position)}` : '-'}
+                      </span>
+                    ) : appliedShowPoints ? (
+                      <span className={`font-mono font-semibold text-gray-100 ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'text-[9px]' : 'text-[10px]'}`}>
+                        {points} Pts
+                      </span>
+                    ) : (
+                      <span className={`font-mono font-semibold text-gray-100 ${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'text-[9px]' : 'text-[10px]'}`}>-</span>
+                    )}
                   </td>
                 );
               })}
             </tr>
           </tbody>
         </table>
+        </div>
+        </div>
       </div>
     );
   };
@@ -843,12 +1233,14 @@ export default function PredictionSummary({
             />
             
             <div className={getBottomMarginClasses()}>
+              <div className={getActionButtonsWrapperClasses()}>
               <button
-                onClick={handleClose}
-                className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
+                  onClick={handleClose}
+                  className={getCloseActionButtonClasses()}
               >
                 Close
               </button>
+              </div>
             </div>
           </>
         ) : (
@@ -860,24 +1252,25 @@ export default function PredictionSummary({
               </div>
             )}
             
-            {/* Smaller screens get special treatment */}
-            {(isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView) ? (
+            {/* Smaller screens and tablets get special treatment */}
+            {(isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView || isTabletSmallConstrainedView || isMediumConstrainedView) ? (
               renderMobileView()
             ) : (
               // Regular desktop view - original layout
-              <div
-                ref={scrollContainerRef}
-                className={`overflow-x-auto overflow-y-auto bg-[#111111] ${tableScrollHeightClass} ${sortedTeamIds.length < 7 ? 'flex justify-center' : ''}`}
-                style={showRightShadow ? { boxShadow: 'inset -25px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
-              >
-                <table className={`${sortedTeamIds.length < 7 ? 'mx-auto' : 'w-full'} border-separate border-spacing-0 bg-[#111111]`}>
+              <div className={shouldCenterSummaryLayout ? 'flex flex-col items-center justify-center w-full min-h-[80vh]' : ''}>
+                <div
+                  ref={scrollContainerRef}
+                  className={`overflow-x-auto overflow-y-auto bg-[#111111] ${tableScrollHeightClass} ${sortedTeamIds.length < 7 ? 'flex justify-center' : ''} ${shouldCenterSummaryLayout ? 'flex-shrink-0' : ''}`}
+                  style={showRightShadow ? { boxShadow: 'inset -25px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
+                >
+                  <table className={`${sortedTeamIds.length < 7 ? 'mx-auto' : 'w-full'} border-separate border-spacing-0 bg-[#111111]`}>
                   <thead className="sticky top-0 z-20 bg-[#111111]">
                     <tr>
-                      <th className={`sticky left-0 z-30 bg-[#111111] px-2 py-1.5 border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                      <th className={`sticky left-0 z-30 bg-[#111111] px-2 py-1.5 border-r border-[#2a2a2a] border-b border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`} style={{ boxShadow: '2px 0 4px rgba(0,0,0,0.5)' }}>
                         <div className={`flex flex-col items-center text-center font-bold text-[#f7e479] leading-tight ${isTabletSmallConstrainedView ? 'text-sm' : 'text-base'}`}>
                           <span>Forecast</span>
                           <span>Summary</span>
-                        </div>
+                          </div>
                       </th>
                       {sortedTeamIds.map(teamId => {
                         const team = getTeamDetails(teamId);
@@ -886,7 +1279,7 @@ export default function PredictionSummary({
                         return (
                           <th
                             key={teamId}
-                            className={`sticky top-0 z-10 bg-[#111111] px-2 py-1.5 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] whitespace-nowrap ${sortedTeamIds.length < 7 ? 'min-w-[150px] max-w-[200px]' : ''}`}
+                            className={`sticky top-0 z-25 bg-[#111111] px-2 py-1.5 text-center text-sm font-semibold text-primary border-b border-[#2a2a2a] whitespace-nowrap ${sortedTeamIds.length < 7 ? 'min-w-[150px] max-w-[200px]' : ''}`}
                           >
                             <div className="flex flex-col items-center">
                               <div className="relative h-8 w-8 mb-1">
@@ -897,7 +1290,7 @@ export default function PredictionSummary({
                                   className="object-contain"
                                 />
                               </div>
-                              <span className="text-xs">{team.shortName || team.name || 'Unknown Team'}</span>
+                              <span className="text-xs">{getResponsiveTeamName(team)}</span>
                             </div>
                           </th>
                         );
@@ -907,7 +1300,7 @@ export default function PredictionSummary({
                   <tbody>
                     {allMatchdays.map(matchday => (
                       <tr key={matchday}>
-                        <td className={`sticky left-0 z-10 bg-[#111111] px-2 py-1.5 text-center font-semibold text-white border-r border-[#2a2a2a] border-b border-[#2a2a2a] text-xs ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                        <td className={`sticky left-0 z-10 bg-[#111111] px-2 py-1.5 text-center font-semibold text-white border-r border-[#2a2a2a] border-b border-[#2a2a2a] text-xs ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`} style={{ boxShadow: '2px 0 4px rgba(0,0,0,0.5)' }}>
                           Matchday {matchday}
                         </td>
                         
@@ -941,9 +1334,11 @@ export default function PredictionSummary({
                                               className="object-contain"
                                             />
                                           </div>
-                                          <span className="text-xs text-primary truncate" title={opponent.name}>
-                                            {opponent.shortName || opponent.name}
+                                          {!(isTabletSmallConstrainedView || isMediumConstrainedView) && (
+                                            <span className="text-xs text-primary truncate" title={opponent.name}>
+                                              {getResponsiveTeamName(opponent)}
                                           </span>
+                                          )}
                                         </div>
                                       </div>
                                     );
@@ -959,8 +1354,8 @@ export default function PredictionSummary({
                     ))}
                     
                     {/* Total points row */}
-                    <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20 bg-[#111111]' : ''}`}>
-                      <td className={`${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-2 py-3 text-center font-semibold text-[#f7e479] border-r border-[#2a2a2a] border-t border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`}>
+                    <tr className={`${shouldStickyPoints ? 'sticky bottom-0 z-20 bg-[#111111]' : ''}`} style={shouldStickyPoints ? { boxShadow: '0 -2px 4px rgba(0,0,0,0.5)' } : undefined}>
+                      <td className={`${shouldStickyPoints ? 'sticky left-0 bottom-0 z-30' : 'sticky left-0 z-10'} bg-[#111111] px-2 py-3 text-center font-semibold text-[#f7e479] border-r border-[#2a2a2a] border-t border-[#2a2a2a] ${isTabletSmallConstrainedView ? 'w-[110px] min-w-[110px]' : 'min-w-[120px]'}`} style={shouldStickyPoints ? { boxShadow: '2px -2px 4px rgba(0,0,0,0.5)' } : { boxShadow: '2px 0 4px rgba(0,0,0,0.5)' }}>
                         {'Standings:'}
                       </td>
                       {sortedTeamIds.map(teamId => {
@@ -979,7 +1374,7 @@ export default function PredictionSummary({
                         }
                         
                         return (
-                          <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-2 py-3 text-center border-t border-[#2a2a2a] ${sortedTeamIds.length < 7 ? 'min-w-[150px] max-w-[200px]' : ''}`}>
+                          <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-2 py-3 text-center border-t border-[#2a2a2a] ${sortedTeamIds.length < 7 ? 'min-w-[150px] max-w-[200px]' : ''}`} style={shouldStickyPoints ? { boxShadow: '0 -2px 4px rgba(0,0,0,0.5)' } : undefined}>
                             <span className="font-mono text-base font-semibold text-gray-100">{displayText}</span>
                           </td>
                         );
@@ -987,23 +1382,24 @@ export default function PredictionSummary({
                     </tr>
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
             
             <div className={getBottomMarginClasses()}>
-              <div className="flex gap-2 justify-center">
-                <button
+              <div className={getActionButtonsWrapperClasses()}>
+              <button
                   onClick={() => setShowEditPanel(!showEditPanel)}
-                  className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
+                  className={getEditActionButtonClasses()}
                 >
                   Edit
                 </button>
                 <button
                   onClick={handleClose}
-                  className={`${getCloseButtonClasses()} ${isMobileMConstrainedView ? 'text-xs py-1 px-3' : ''}`}
-                >
-                  Close
-                </button>
+                  className={getCloseActionButtonClasses()}
+              >
+                Close
+              </button>
               </div>
             </div>
             
@@ -1024,267 +1420,30 @@ export default function PredictionSummary({
                   
                   {/* Scrollable Content */}
                   <div className="flex-1 overflow-y-auto px-6">
-                    {/* Matchday Range Filter and Display Options */}
-                    <div className="pb-6 flex gap-6">
-                      <div className="flex-1">
-                        <label className="block text-sm font-semibold text-gray-300 mb-3">
-                          Matchday Range
-                        </label>
-                        <div className="flex gap-3">
-                        <div className="w-24">
-                          <label className="block text-xs text-gray-400 mb-1.5">From</label>
-                          <div className="relative" ref={fromDropdownRef}>
-                            <button
-                              ref={fromButtonRef}
-                              type="button"
-                              onClick={() => setOpenDropdown(openDropdown === 'from' ? null : 'from')}
-                              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
-                            >
-                              {tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin}
-                            </button>
-                            <div className="absolute right-0.5 top-0 bottom-0 flex flex-col justify-center pointer-events-none">
-                              <button
-                                type="button"
-                                onClick={handleFromIncrement}
-                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
-                                onMouseDown={(e) => e.preventDefault()}
-                              >
-                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleFromDecrement}
-                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
-                                onMouseDown={(e) => e.preventDefault()}
-                              >
-                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </button>
-                            </div>
-                            {openDropdown === 'from' && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded z-50" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-                                {getAvailableFromMatchdays().map(md => (
-                                  <button
-                                    key={md}
-                                    type="button"
-                                    onClick={() => {
-                                      handleMatchdayFromChange(md.toString());
-                                      setOpenDropdown(null);
-                                    }}
-                                    className={`w-full px-2.5 py-1 text-sm text-center transition-colors ${
-                                      (tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin) === md
-                                        ? 'bg-[#f7e479]/10 text-[#f7e479]'
-                                        : 'text-white hover:bg-[#f7e479] hover:text-black'
-                                    }`}
-                                  >
-                                    {md}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                    {/* Matchday Range, Teams, Display */}
+                    {isCompactFilterLayout ? (
+                      <>
+                        <div className="pb-4">
+                          {renderMatchdayRangeSection(true)}
                         </div>
-                        <div className="w-24">
-                          <label className="block text-xs text-gray-400 mb-1.5">To</label>
-                          <div className="relative" ref={toDropdownRef}>
-                            <button
-                              ref={toButtonRef}
-                              type="button"
-                              onClick={() => setOpenDropdown(openDropdown === 'to' ? null : 'to')}
-                              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
-                            >
-                              {tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax}
-                            </button>
-                            <div className="absolute right-0.5 top-0 bottom-0 flex flex-col justify-center pointer-events-none">
-                              <button
-                                type="button"
-                                onClick={handleToIncrement}
-                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
-                                onMouseDown={(e) => e.preventDefault()}
-                              >
-                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleToDecrement}
-                                className="pointer-events-auto p-0.5 text-gray-400 hover:text-white transition-colors"
-                                onMouseDown={(e) => e.preventDefault()}
-                              >
-                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </button>
-                            </div>
-                            {openDropdown === 'to' && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded z-50" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-                                {getAvailableToMatchdays().map(md => (
-                                  <button
-                                    key={md}
-                                    type="button"
-                                    onClick={() => {
-                                      handleMatchdayToChange(md.toString());
-                                      setOpenDropdown(null);
-                                    }}
-                                    className={`w-full px-2.5 py-1 text-sm text-center transition-colors ${
-                                      (tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax) === md
-                                        ? 'bg-[#f7e479]/10 text-[#f7e479]'
-                                        : 'text-white hover:bg-[#f7e479] hover:text-black'
-                                    }`}
-                                  >
-                                    {md}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                        <div className="border-b border-white/8 my-4"></div>
+                        {renderTeamSelectionSection(true)}
+                        <div className="border-b border-white/8 my-4"></div>
+                        <div className="pb-4 mb-6">
+                          {renderDisplayOptionsSection(true)}
+            </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="pb-6 flex gap-6">
+                          {renderMatchdayRangeSection()}
+                          <div className="w-px bg-white/8"></div>
+                          {renderDisplayOptionsSection()}
                         </div>
-                        </div>
-                        {matchdayRangeError && (
-                          <p className="text-xs text-red-400 mt-2">Invalid range: From cannot be greater than To.</p>
-                        )}
-                      </div>
-                      
-                      {/* Vertical Separator */}
-                      <div className="w-px bg-white/8"></div>
-                      
-                      {/* Display Options */}
-                      <div className="flex-1">
-                        <label className="block text-sm font-semibold text-gray-300 mb-3">
-                          Display Options
-                        </label>
-                        <div className={`space-y-2 ${displayOptionsError ? 'border-l-2 border-red-500 pl-4 -ml-6' : ''}`}>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={tempShowPosition}
-                              onChange={(e) => {
-                                const newValue = e.target.checked;
-                                if (!newValue && !tempShowPoints) {
-                                  // Can't uncheck if it's the last one
-                                  return;
-                                }
-                                setTempShowPosition(newValue);
-                                setDisplayOptionsError(false);
-                              }}
-                              className={`w-5 h-5 border-0 rounded appearance-none focus:ring-0 focus:ring-offset-0 cursor-pointer relative ${tempShowPosition ? 'bg-[#f7e479]' : 'bg-[#1a1a1a] border border-[#2a2a2a]'}`}
-                              style={{
-                                backgroundImage: tempShowPosition ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z' fill='%23000000'/%3E%3C/svg%3E")` : 'none',
-                                backgroundSize: 'contain',
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'center'
-                              }}
-                            />
-                            <span className={`text-sm ${displayOptionsError ? 'text-red-400' : 'text-gray-300'}`}>Position (1st, 2nd, etc.)</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={tempShowPoints}
-                              onChange={(e) => {
-                                const newValue = e.target.checked;
-                                if (!newValue && !tempShowPosition) {
-                                  // Can't uncheck if it's the last one
-                                  return;
-                                }
-                                setTempShowPoints(newValue);
-                                setDisplayOptionsError(false);
-                              }}
-                              className={`w-5 h-5 border-0 rounded appearance-none focus:ring-0 focus:ring-offset-0 cursor-pointer relative ${tempShowPoints ? 'bg-[#f7e479]' : 'bg-[#1a1a1a] border border-[#2a2a2a]'}`}
-                              style={{
-                                backgroundImage: tempShowPoints ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z' fill='%23000000'/%3E%3C/svg%3E")` : 'none',
-                                backgroundSize: 'contain',
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'center'
-                              }}
-                            />
-                            <span className={`text-sm ${displayOptionsError ? 'text-red-400' : 'text-gray-300'}`}>Points (38 Pts)</span>
-                          </label>
-                          {displayOptionsError && (
-                            <p className="text-xs text-red-400 mt-2">Select at least one display option.</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Separator */}
-                    <div className="border-b border-white/8 mb-6"></div>
-                    
-                    {/* Team Filter */}
-                    <div className={`pb-6 ${teamSelectionError ? 'border-l-2 border-red-500 pl-4 -ml-6' : ''}`}>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-2">
-                          <label className={`block text-sm font-semibold ${teamSelectionError ? 'text-red-400' : 'text-gray-300'}`}>
-                            Select Teams:
-                          </label>
-                          <span className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs text-gray-300">
-                            {tempTeamIds.length}/{allSortedTeamIds.length}
-                          </span>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                          <button
-                            onClick={() => {
-                              setTempTeamIds([...allSortedTeamIds]);
-                              setTeamSelectionError(false);
-                            }}
-                            className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                          >
-                            Select All
-                          </button>
-                          <span className="text-gray-600">·</span>
-                          <button
-                            onClick={() => {
-                              setTempTeamIds([]);
-                              setTeamSelectionError(true);
-                            }}
-                            className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-5 gap-1.5 max-h-96 overflow-y-auto">
-                        {allSortedTeamIds.map(teamId => {
-                          const team = getTeamDetails(teamId);
-                          if (!team) return null;
-                          const isSelected = tempTeamIds.includes(teamId);
-                          
-                          return (
-                            <label
-                              key={teamId}
-                              className={`flex flex-col items-center p-1.5 rounded cursor-pointer transition-all ${
-                                isSelected 
-                                  ? 'bg-[#f7e479]/5 border border-[#f7e479]/50' 
-                                  : 'bg-transparent border border-white/10 hover:border-white/20'
-                              }`}
-                            >
-                              <div className="relative w-8 h-8 mb-1">
-                                <Image
-                                  src={team.crest || "/placeholder-team.png"}
-                                  alt={team.name}
-                                  fill
-                                  className="object-contain"
-                                />
-                              </div>
-                              <span className={`text-[9px] text-center leading-tight ${isSelected ? 'text-[#f7e479]/80' : 'text-white'}`}>{team.shortName || team.name}</span>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => handleTeamSelectionChange(teamId, e.target.checked)}
-                                className="sr-only"
-                              />
-                            </label>
-                          );
-                        })}
-                      </div>
-                      {teamSelectionError && (
-                        <p className="text-xs text-red-400 mt-2">Select at least one team to update the summary.</p>
-                      )}
-                    </div>
+                        <div className="border-b border-white/8 mb-6"></div>
+                        {renderTeamSelectionSection()}
+                      </>
+                    )}
                   </div>
                   
                   {/* Bottom Action Bar */}
