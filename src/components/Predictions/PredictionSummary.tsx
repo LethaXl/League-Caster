@@ -549,7 +549,9 @@ export default function PredictionSummary({
     if (matchday > effectiveTo) return false;
     return true;
   });
-  const shouldCenterSummaryLayout = (sortedTeamIds.length <= 4 || allMatchdays.length < 7) && !(isTabletSmallConstrainedView || isMediumConstrainedView);
+  // Don't center if there are many teams on mobile (<520px) to prevent overflow
+  const isSmallMobileView = screenWidth > 0 && screenWidth < 520;
+  const shouldCenterSummaryLayout = (sortedTeamIds.length <= 4 || allMatchdays.length < 7) && !(isTabletSmallConstrainedView || isMediumConstrainedView) && !(isSmallMobileView && sortedTeamIds.length > 6);
   
   // Determine if we should make the points row sticky (only if there are many matchdays)
   const shouldStickyPoints = allMatchdays.length >= 5;
@@ -1039,7 +1041,7 @@ export default function PredictionSummary({
         </h2>
         <div
           ref={scrollContainerRef}
-          className={`overflow-x-auto overflow-y-auto bg-[#111111] ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''} ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length > 3 && allMatchdays.length < 7 ? 'w-full' : ''}`}
+          className={`overflow-x-auto overflow-y-auto bg-[#111111] ${tableScrollHeightClass}${isMobileSConstrainedView ? ' mobile-s' : ''} ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length > 3 && allMatchdays.length < 7 ? 'w-full' : ''} ${isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? 'w-full' : ''}`}
           style={showRightShadow ? { boxShadow: 'inset -20px 0 25px -25px rgba(0,0,0,0.9)' } : undefined}
         >
         <div className="pl-0 pr-2">
@@ -1071,10 +1073,11 @@ export default function PredictionSummary({
                     className={`sticky top-0 ${isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? 'z-31' : 'z-25'} bg-[#111111] px-1 py-1.5 text-center border-b border-[#2a2a2a] whitespace-nowrap ${isMobileView ? '' : sortedTeamIds.length <= 2 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[85px]' : 'min-w-[130px]') : sortedTeamIds.length === 3 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[70px]' : 'min-w-[110px]') : sortedTeamIds.length >= 4 && sortedTeamIds.length <= 10 ? '' : sortedTeamIds.length > 10 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]') : (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]')}`}
                     style={{
                       ...(isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? { zIndex: 31 } : {}),
+                      ...(isMobileView && isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? { maxWidth: '60px' } : {}),
                       ...(!isMobileView && tabletWidth ? { width: `${tabletWidth}px`, minWidth: `${tabletWidth}px`, maxWidth: `${tabletWidth}px` } : {})
                     }}
                   >
-                    <div className={`flex flex-col items-center justify-center ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView ? 'w-full min-w-0' : ''}`}>
+                    <div className={`flex flex-col items-center justify-center ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView ? 'w-full min-w-0' : ''} ${isMobileView && isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? 'w-full min-w-0' : ''}`}>
                       <div className={isMobileSConstrainedView ? 'relative h-6 w-6 mb-0.5' : isMobileMConstrainedView ? 'relative h-7 w-7 mb-0.5' : 'relative h-8 w-8 mb-1'}>
                         <Image
                           src={team.crest || "/placeholder-team.png"}
@@ -1083,7 +1086,10 @@ export default function PredictionSummary({
                           className="object-contain"
                         />
                       </div>
-                      <span className={`${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : 'text-[10px]'} ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView ? 'truncate w-full text-center' : ''}`} style={(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView && tabletWidth ? { maxWidth: `${tabletWidth - 8}px` } : undefined}>{getResponsiveTeamName(team, sortedTeamIds.length <= 2)}</span>
+                      <span className={`${isMobileSConstrainedView ? 'text-[8px]' : isMobileMConstrainedView ? 'text-[9px]' : 'text-[10px]'} ${(isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView ? 'truncate w-full text-center' : ''} ${isMobileView && isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? 'truncate w-full text-center' : ''}`} style={{
+                        ...((isTabletSmallConstrainedView || isMediumConstrainedView) && sortedTeamIds.length >= 4 && !isMobileView && tabletWidth ? { maxWidth: `${tabletWidth - 8}px` } : {}),
+                        ...(isMobileView && isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? { maxWidth: '52px' } : {})
+                      }}>{getResponsiveTeamName(team, sortedTeamIds.length <= 2)}</span>
                     </div>
                   </th>
                 );
@@ -1112,6 +1118,7 @@ export default function PredictionSummary({
                       className={`px-1 py-1 align-top border-b border-[#2a2a2a] ${isMobileView ? 'p-0' : ''} ${isMobileView ? '' : sortedTeamIds.length <= 2 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[85px]' : 'min-w-[130px]') : sortedTeamIds.length === 3 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[70px]' : 'min-w-[110px]') : sortedTeamIds.length >= 4 && sortedTeamIds.length <= 10 ? '' : sortedTeamIds.length > 10 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]') : (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]')}`}
                       style={{
                         ...(isMobileView ? { width: '1%' } : {}),
+                        ...(isMobileView && isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? { maxWidth: '60px' } : {}),
                         ...(isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? { zIndex: 11 } : {}),
                         ...(!isMobileView && tabletWidth ? { width: `${tabletWidth}px`, minWidth: `${tabletWidth}px`, maxWidth: `${tabletWidth}px` } : {})
                       }}
@@ -1172,6 +1179,7 @@ export default function PredictionSummary({
                 return (
                   <td key={`points-${teamId}`} className={`${shouldStickyPoints ? 'sticky bottom-0 z-20' : ''} bg-[#111111] px-1 py-2 text-center border-t border-[#2a2a2a] ${isMobileSConstrainedView ? 'text-[10px]' : 'text-sm'} ${isMobileView ? '' : sortedTeamIds.length <= 2 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[85px]' : 'min-w-[130px]') : sortedTeamIds.length === 3 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'min-w-[70px]' : 'min-w-[110px]') : sortedTeamIds.length >= 4 && sortedTeamIds.length <= 10 ? '' : sortedTeamIds.length > 10 ? (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]') : (isTabletSmallConstrainedView || isMediumConstrainedView ? 'w-[28px] min-w-[28px] max-w-[28px]' : 'min-w-[60px] max-w-[70px]')}`} style={{
                     ...(shouldStickyPoints ? { boxShadow: '0 -2px 4px rgba(0,0,0,0.5)' } : {}),
+                    ...(isMobileView && isSmallMobileView && sortedTeamIds.length > 6 && allMatchdays.length < 7 ? { maxWidth: '60px' } : {}),
                     ...(isFirstTeam && (isTabletSmallConstrainedView || isMediumConstrainedView) ? { zIndex: shouldStickyPoints ? 31 : 11 } : {}),
                     ...(!isMobileView && tabletWidth ? { width: `${tabletWidth}px`, minWidth: `${tabletWidth}px`, maxWidth: `${tabletWidth}px` } : {})
                   }}>
