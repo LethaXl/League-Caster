@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { Match, Prediction } from '@/types/predictions';
 import { Standing } from '@/services/football-api';
@@ -10,6 +10,7 @@ interface PredictionSummaryProps {
   matches: Match[];
   selectedTeamIds: number[];
   standings: Standing[];
+  standingsByMatchday?: Record<number, Standing[]>;
   onClose: () => void;
 }
 
@@ -18,6 +19,7 @@ export default function PredictionSummary({
   matches, 
   selectedTeamIds,
   standings,
+  standingsByMatchday,
   onClose 
 }: PredictionSummaryProps) {
   const { isRaceMode, tableDisplayMode, setTableDisplayMode } = usePrediction();
@@ -244,15 +246,6 @@ export default function PredictionSummary({
     return baseName;
   };
   
-  // Get team points from standings
-  const getTeamPoints = (teamId: number) => {
-    return standings.find(s => s.team.id === teamId)?.points || 0;
-  };
-
-  const getTeamPosition = (teamId: number) => {
-    return standings.find(s => s.team.id === teamId)?.position ?? '-';
-  };
-
   const getOrdinalSuffix = (value: number | string) => {
     const num = Number(value);
     if (Number.isNaN(num)) return '';
@@ -359,16 +352,6 @@ export default function PredictionSummary({
     return `${prediction.homeGoals}-${prediction.awayGoals}`;
   };
   
-  // Sort teams by position in the standings
-  const allSortedTeamIds = [...selectedTeamIds].sort((a, b) => {
-    const teamAPosition = standings.find(s => s.team.id === a)?.position || 0;
-    const teamBPosition = standings.find(s => s.team.id === b)?.position || 0;
-    return teamAPosition - teamBPosition;
-  });
-  
-  // Apply team filter (use appliedTeamIds, not tempTeamIds)
-  const sortedTeamIds = allSortedTeamIds.filter(teamId => appliedTeamIds.includes(teamId));
-  
   // Get all matchdays from the matches
   const allAvailableMatchdays = [...new Set(matches.map(match => match.matchday || 0))].sort((a, b) => a - b);
   
@@ -379,6 +362,34 @@ export default function PredictionSummary({
   // Get effective numeric range from MdValue
   const getEffectiveFrom = (md: MdValue) => md === 'all' ? minMatchday : md;
   const getEffectiveTo = (md: MdValue) => md === 'all' ? maxMatchday : md;
+  
+  // Get the matchday whose table we want to show in Standings row - memoized
+  const standingsSnapshot = useMemo(() => {
+    const toMd = getEffectiveTo(appliedMatchdayMax);
+    // fall back to current standings if we do not have a snapshot
+    return standingsByMatchday?.[toMd] ?? standings;
+  }, [appliedMatchdayMax, standingsByMatchday, standings, maxMatchday]);
+  
+  // Get team points from standings snapshot for the applied range - memoized
+  const getTeamPoints = useCallback((teamId: number) => {
+    return standingsSnapshot.find(s => s.team.id === teamId)?.points ?? 0;
+  }, [standingsSnapshot]);
+
+  const getTeamPosition = useCallback((teamId: number) => {
+    return standingsSnapshot.find(s => s.team.id === teamId)?.position ?? '-';
+  }, [standingsSnapshot]);
+  
+  // Sort teams by position in the standings snapshot for the applied range - memoized
+  const allSortedTeamIds = useMemo(() => {
+    return [...selectedTeamIds].sort((a, b) => {
+      const posA = standingsSnapshot.find(s => s.team.id === a)?.position ?? 99;
+      const posB = standingsSnapshot.find(s => s.team.id === b)?.position ?? 99;
+      return posA - posB;
+    });
+  }, [selectedTeamIds, standingsSnapshot]);
+  
+  // Apply team filter (use appliedTeamIds, not tempTeamIds)
+  const sortedTeamIds = allSortedTeamIds.filter(teamId => appliedTeamIds.includes(teamId));
   
   // Get effective numeric range (for validation - use temp values)
   const effectiveFrom = getEffectiveFrom(tempMatchdayMin);
@@ -710,7 +721,10 @@ export default function PredictionSummary({
             <button
               ref={fromButtonRef}
               type="button"
-              onClick={() => setOpenDropdown(openDropdown === 'from' ? null : 'from')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenDropdown(prev => prev === 'from' ? null : 'from');
+              }}
               className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
             >
               {tempMatchdayMin === 'all' ? minMatchday : tempMatchdayMin}
@@ -766,7 +780,10 @@ export default function PredictionSummary({
             <button
               ref={toButtonRef}
               type="button"
-              onClick={() => setOpenDropdown(openDropdown === 'to' ? null : 'to')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenDropdown(prev => prev === 'to' ? null : 'to');
+              }}
               className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2.5 py-2 pr-7 text-white text-sm text-center focus:outline-none focus:border-[#2a2a2a] cursor-pointer"
             >
               {tempMatchdayMax === 'all' ? maxMatchday : tempMatchdayMax}
@@ -836,6 +853,7 @@ export default function PredictionSummary({
             onChange={(e) => {
               const newValue = e.target.checked;
               if (!newValue && !tempShowPoints) { return; }
+              if (tempShowPosition === newValue) return; // Prevent unnecessary update
               setTempShowPosition(newValue);
               setDisplayOptionsError(false);
             }}
@@ -856,6 +874,7 @@ export default function PredictionSummary({
             onChange={(e) => {
               const newValue = e.target.checked;
               if (!newValue && !tempShowPosition) { return; }
+              if (tempShowPoints === newValue) return; // Prevent unnecessary update
               setTempShowPoints(newValue);
               setDisplayOptionsError(false);
             }}

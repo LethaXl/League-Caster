@@ -366,18 +366,27 @@ export default function Home() {
   const handleHistoricalMatchdayChange = async (matchday: number | null) => {
     if (!selectedLeague || !standings.length) return;
     
-    setSelectedHistoricalMatchday(matchday);
+    // Guard: do nothing if matchday hasn't changed
+    setSelectedHistoricalMatchday(prev => {
+      if (prev === matchday) return prev;
+      return matchday;
+    });
+    
+    // Early return if matchday hasn't actually changed
+    if (selectedHistoricalMatchday === matchday) return;
+    
     // In forecast mode, automatically enable comparison when selecting a historical matchday
     if (viewingFromMatchday !== null && matchday !== null) {
-      setIsComparing(true); // Checked by default in forecast mode
+      setIsComparing(prev => prev === true ? prev : true); // Only update if not already true
     } else if (matchday === null) {
-      setIsComparing(false); // Uncheck when clearing selection
+      setIsComparing(prev => prev === false ? prev : false); // Only update if not already false
     }
     // In regular mode, preserve the isComparing state when switching between matchdays
     // (don't reset it - let the user's checkbox preference persist)
     
     if (matchday === null) {
-      setHistoricalStandings([]);
+      // Don't clear to empty array - keep previous standings to prevent flicker
+      // The table will use current standings when matchday is null
       return;
     }
     
@@ -387,7 +396,7 @@ export default function Home() {
       const savedPredictedStandings = predictedStandingsByMatchday.get(Number(matchday));
       if (savedPredictedStandings && savedPredictedStandings.length > 0) {
         // Use saved predicted standings instead of calculating from completed matches
-        setHistoricalStandings([]); // Clear historical standings since we're using predicted ones
+        // Don't clear historical standings - just don't use them, prevents flicker
         return;
       }
       // If no saved predicted standings, continue to calculate historical standings from completed matches
@@ -1845,6 +1854,9 @@ export default function Home() {
     const savedPredictions = JSON.parse(localStorage.getItem(`predictions_${selectedLeague}`) || '{}');
     console.log("Saved predictions:", savedPredictions);
     
+    // Filter matches by selected teams if in race mode
+    const shouldFilterByTeams = isRaceMode && selectedTeamIds && selectedTeamIds.length > 0;
+    
     // For each completed matchday, try to find the matches in the cache
     matchdaysList.forEach((matchday: number) => {
       console.log(`Looking for matches in matchday ${matchday}`);
@@ -1858,7 +1870,15 @@ export default function Home() {
         const matchdayMatches = matchesCache.current.get(cacheKey)!;
         
         // Only include matches that are in completedIds
-        const filteredMatches = matchdayMatches.filter(m => completedIds.includes(m.id));
+        let filteredMatches = matchdayMatches.filter(m => completedIds.includes(m.id));
+        
+        // Filter by selected teams if in race mode
+        if (shouldFilterByTeams) {
+          filteredMatches = filteredMatches.filter(m => 
+            selectedTeamIds.includes(m.homeTeam.id) || selectedTeamIds.includes(m.awayTeam.id)
+          );
+        }
+        
         console.log(`Found ${filteredMatches.length} completed matches for matchday ${matchday}`);
         
         // Make sure matchday property is set correctly
@@ -1893,7 +1913,15 @@ export default function Home() {
             const parsedMatches = JSON.parse(storedMatches) as Match[];
             
             // Only include matches that are in completedIds
-            const filteredMatches = parsedMatches.filter(m => completedIds.includes(m.id));
+            let filteredMatches = parsedMatches.filter(m => completedIds.includes(m.id));
+            
+            // Filter by selected teams if in race mode
+            if (shouldFilterByTeams) {
+              filteredMatches = filteredMatches.filter(m => 
+                selectedTeamIds.includes(m.homeTeam.id) || selectedTeamIds.includes(m.awayTeam.id)
+              );
+            }
+            
             console.log(`Found ${filteredMatches.length} completed matches from localStorage for matchday ${matchday}`);
             
             // Make sure matchday property is set correctly
@@ -1929,7 +1957,7 @@ export default function Home() {
     // Set the collected matches and predictions
     setCompletedMatches(allMatches);
     setMatchPredictions(predictionsMap);
-  }, [selectedLeague, maxMatchday]);
+  }, [selectedLeague, maxMatchday, isRaceMode, selectedTeamIds]);
 
   // Handle showing prediction summary
   const handleShowPredictionSummary = useCallback(() => {
@@ -2698,7 +2726,10 @@ export default function Home() {
                                 <div className="relative inline-block group historical-dropdown-container">
                                   <button
                                     type="button"
-                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsDropdownOpen(prev => !prev);
+                                    }}
                                     disabled={loadingHistorical || loading}
                                     className={`appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 flex items-center justify-center ${
                                       selectedHistoricalMatchday === null 
@@ -2763,7 +2794,10 @@ export default function Home() {
                                     <input
                                       type="checkbox"
                                       checked={isComparing}
-                                      onChange={(e) => setIsComparing(e.target.checked)}
+                                      onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        setIsComparing(prev => prev === newValue ? prev : newValue);
+                                      }}
                                       disabled={selectedHistoricalMatchday === null}
                                       className="h-4 w-4 border-r border-[#f7e479] rounded-l cursor-pointer appearance-none focus:ring-1 focus:ring-[#f7e479] relative flex-shrink-0"
                                       style={{
@@ -2776,13 +2810,13 @@ export default function Home() {
                                         boxSizing: 'border-box'
                                       }}
                                     />
-                                      <div 
-                                        className="h-4 px-1.5 flex items-center rounded-r bg-card"
-                                      >
-                                        <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
-                                          Compare To Today
+                                    <div 
+                                      className="h-4 px-1.5 flex items-center rounded-r bg-card"
+                                    >
+                                      <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
+                                        Compare To Today
                           </span>
-                                      </div>
+                                    </div>
                                   </div>
                                 </label>
                               </div>
@@ -2791,16 +2825,7 @@ export default function Home() {
                       )}
                 </h2>
                 </div>
-                <div className="flex items-center space-x-4">
-                  {/* Show Prediction Summary button for race mode when viewing standings */}
-                  {isRaceMode && isViewingStandings && viewingFromMatchday !== null && (
-                    <button
-                      onClick={handleShowPredictionSummary}
-                      className="text-xs px-3 py-1 xs:text-sm xs:px-4 xs:py-1.5 sm:text-base sm:px-8 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold"
-                    >
-                      Match Summary
-                    </button>
-                  )}
+                <div className="flex max-[500px]:flex-col max-[500px]:space-y-2 max-[500px]:space-x-0 items-center space-x-4 min-h-[28px]">
                   {isViewingStandings && !loading && viewingFromMatchday && (() => {
                     const leagueMaxMd = selectedLeague === 'CL' ? 8 : (selectedLeague === 'BL1' || selectedLeague === 'FL1') ? 34 : 38;
                     
@@ -2854,12 +2879,22 @@ export default function Home() {
                             clearForecastFormsCache(selectedLeague);
                           }
                       }}
-                        className="px-3 sm:px-4 text-xs sm:text-sm bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-[28px] sm:h-[36px] flex items-center justify-center"
+                        className="px-3 sm:px-4 text-xs sm:text-sm bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-[28px] sm:h-[36px] flex items-center justify-center whitespace-nowrap"
                     >
-                      Back to Predictions
+                      <span className="md:hidden">← Predictions</span>
+                      <span className="hidden md:inline">Back to Predictions</span>
                     </button>
                     );
                   })()}
+                  {/* Show Prediction Summary button for race mode when viewing standings */}
+                  {isRaceMode && isViewingStandings && viewingFromMatchday !== null && (
+                    <button
+                      onClick={handleShowPredictionSummary}
+                      className="text-xs px-3 py-1 xs:text-sm xs:px-4 xs:py-1.5 sm:text-base sm:px-8 sm:py-2 bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-[28px] sm:h-[36px] flex items-center justify-center whitespace-nowrap"
+                    >
+                      Summary
+                    </button>
+                  )}
                   {!isViewingStandings && (
                     <button
                       onClick={handleStartPredictions}
@@ -3086,6 +3121,7 @@ export default function Home() {
             matches={completedMatches}
             selectedTeamIds={selectedTeamIds}
             standings={predictedStandings}
+            standingsByMatchday={Object.fromEntries(predictedStandingsByMatchday)}
             onClose={() => {
               setShowPredictionSummary(false);
               // No need to clear matches/predictions since we might want to show them again

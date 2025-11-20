@@ -161,7 +161,6 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileM, setIsMobileM] = useState(false);
   const [visibleStandings, setVisibleStandings] = useState<Standing[]>(standings);
-  const [animating, setAnimating] = useState(false);
   const [formsReady, setFormsReady] = useState(false);
   
   // Use forms from prop if provided, otherwise use empty map
@@ -177,48 +176,18 @@ export default function StandingsTable({ standings, initialStandings, loading, l
     }
   }, [displayForms, formsLoading]);
   
-  // Handle smooth transitions when table display mode or filtered teams change
+  // Update visible standings immediately without animation to prevent flicker
+  // This single useEffect handles all cases and updates synchronously
   useEffect(() => {
-    if (isRaceMode && selectedTeamIds && selectedTeamIds.length > 0) {
-      // Start animation
-      setAnimating(true);
-      
-      // Use a timeout to allow the fade-out animation to complete
-      setTimeout(() => {
-        if (tableDisplayMode === 'mini') {
-          // Filter to show only selected teams
-          const filtered = standings.filter(standing => 
-            selectedTeamIds.includes(standing.team.id)
-          );
-          setVisibleStandings(filtered);
-        } else {
-          // Show all teams for full table
-          setVisibleStandings(standings);
-        }
-        
-        // Use another timeout to fade back in after the content has been updated
-        setTimeout(() => {
-          setAnimating(false);
-        }, 50);
-      }, 250);
+    if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
+      // Filter to show only selected teams
+      const filtered = standings.filter(standing => 
+        selectedTeamIds.includes(standing.team.id)
+      );
+      setVisibleStandings(filtered);
     } else {
-      // No filtered view needed - show all standings
+      // Show all teams for full table or non-race mode
       setVisibleStandings(standings);
-    }
-  }, [tableDisplayMode, isRaceMode, selectedTeamIds, standings]);
-  
-  // Initialize visible standings with the correct data
-  useEffect(() => {
-    if (standings.length > 0) {
-      // Set initial standings without animation
-      if (isRaceMode && tableDisplayMode === 'mini' && selectedTeamIds && selectedTeamIds.length > 0) {
-        const filtered = standings.filter(standing => 
-          selectedTeamIds.includes(standing.team.id)
-        );
-        setVisibleStandings(filtered);
-      } else {
-        setVisibleStandings(standings);
-      }
     }
   }, [standings, isRaceMode, tableDisplayMode, selectedTeamIds]);
   
@@ -730,7 +699,6 @@ export default function StandingsTable({ standings, initialStandings, loading, l
   }
   
   // Filter and sort standings
-  console.log("StandingsTable - Race mode state:", isRaceMode, "TableDisplayMode:", tableDisplayMode, "SelectedTeamIds:", selectedTeamIds?.length || 0);
   
   // Sort the standings by position to ensure correct display order
   let sortedStandings: Standing[];
@@ -806,7 +774,7 @@ export default function StandingsTable({ standings, initialStandings, loading, l
           }
         }
       `}} />
-      <div className={`transition-opacity duration-300 ease-in-out ${animating ? 'opacity-0' : 'opacity-100'}`}>
+      <div>
         <table className={`w-full max-w-full bg-transparent ${!isMobile ? 'table-fixed' : ''}`} style={{ tableLayout: !isMobile ? 'fixed' : 'auto' }}>
           <thead>
             <tr>
