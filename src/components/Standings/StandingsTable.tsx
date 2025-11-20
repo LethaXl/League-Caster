@@ -119,11 +119,12 @@ function PositionChangeIndicator({ change, size = 'default' }: { change: number 
   const color = isPositive ? 'text-green-400' : 'text-red-400';
   const arrow = isPositive ? '↑' : '↓';
   const fontSize = size === 'small' ? 'text-[9px]' : 'text-sm';
+  const arrowSize = size === 'small' ? 'text-xs' : 'text-base';
   const marginLeft = size === 'small' ? 'ml-0.5' : 'ml-2';
 
   return (
     <span className={`${color} ${fontSize} ${marginLeft} font-bold`} style={{ lineHeight: 1 }}>
-      {arrow} {Math.abs(change)}
+      <span className={arrowSize}>{arrow}</span> {Math.abs(change)}
     </span>
   );
 }

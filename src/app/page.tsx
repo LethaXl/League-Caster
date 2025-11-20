@@ -2560,7 +2560,7 @@ export default function Home() {
               }}
               className="mt-1 text-xs xs:text-sm text-accent hover:text-accent-hover transition-transform hover:scale-105"
             >
-              ← Back to leagues
+              <span className="text-sm xs:text-base">←</span> Back to leagues
             </button>
           </div>
         </div>
@@ -2881,7 +2881,7 @@ export default function Home() {
                       }}
                         className="px-3 sm:px-4 text-xs sm:text-sm bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-[28px] sm:h-[36px] flex items-center justify-center whitespace-nowrap"
                     >
-                      <span className="md:hidden">← Predictions</span>
+                      <span className="md:hidden"><span className="text-sm sm:text-base">←</span> Predictions</span>
                       <span className="hidden md:inline">Back to Predictions</span>
                     </button>
                     );
