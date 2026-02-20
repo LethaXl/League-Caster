@@ -135,6 +135,40 @@ interface ApiError {
   };
 }
 
+// Hardcoded 2025/26 PL MD31: Wolves vs Arsenal played early (not in API as MD31). Show as 2-2 draw in prediction summary.
+// remove end of season
+const SEASON_2025_26_MD31_WOLVES_ARSENAL = {
+  matchId: 999993101 as number,
+  matchday: 31,
+  homeTeamId: 76,   // Wolverhampton Wanderers FC
+  awayTeamId: 57,   // Arsenal FC
+};
+const is2025_26Season = () => {
+  const now = new Date();
+  return (now.getFullYear() === 2025 && now.getMonth() >= 7) || (now.getFullYear() === 2026 && now.getMonth() <= 6);
+};
+const getWolvesArsenalMd31Match = (): Match => ({
+  id: SEASON_2025_26_MD31_WOLVES_ARSENAL.matchId,
+  utcDate: '2026-03-12T20:00:00Z',
+  status: 'FINISHED',
+  matchday: 31,
+  stage: 'REGULAR_SEASON',
+  group: null,
+  homeTeam: {
+    id: 76,
+    name: 'Wolverhampton Wanderers FC',
+    shortName: 'Wolves',
+    crest: 'https://crests.football-data.org/76.svg',
+  },
+  awayTeam: {
+    id: 57,
+    name: 'Arsenal FC',
+    shortName: 'Arsenal',
+    crest: 'https://crests.football-data.org/57.svg',
+  },
+  score: { fullTime: { home: 2, away: 2 } },
+});
+
 // Function to determine the max matchday for a league
 const getMaxMatchday = (leagueCode: string): number => {
   // Bundesliga and Ligue 1 have 18 teams (34 matchdays)
@@ -3115,19 +3149,33 @@ export default function Home() {
         )}
         
         {/* Prediction Summary Modal */}
-        {showPredictionSummary && (
-          <PredictionSummary
-            predictions={matchPredictions}
-            matches={completedMatches}
-            selectedTeamIds={selectedTeamIds}
-            standings={predictedStandings}
-            standingsByMatchday={Object.fromEntries(predictedStandingsByMatchday)}
-            onClose={() => {
-              setShowPredictionSummary(false);
-              // No need to clear matches/predictions since we might want to show them again
-            }}
-          />
-        )}
+        {showPredictionSummary && (() => {
+          // 2025/26 PL: show Wolves vs Arsenal MD31 as 2-2 draw (fixture played early, missing from API for MD31)
+          const wolvesArsenalMatch = getWolvesArsenalMd31Match();
+          const includeWolvesArsenalMd31 = selectedLeague === 'PL' && is2025_26Season();
+          const summaryMatches = includeWolvesArsenalMd31 && !completedMatches.some(m => m.id === wolvesArsenalMatch.id)
+            ? [...completedMatches, wolvesArsenalMatch]
+            : completedMatches;
+          const summaryPredictions = includeWolvesArsenalMd31
+            ? new Map([
+                ...matchPredictions,
+                [wolvesArsenalMatch.id, { matchId: wolvesArsenalMatch.id, type: 'custom' as const, homeGoals: 2, awayGoals: 2 }],
+              ])
+            : matchPredictions;
+          return (
+            <PredictionSummary
+              predictions={summaryPredictions}
+              matches={summaryMatches}
+              selectedTeamIds={selectedTeamIds}
+              standings={predictedStandings}
+              standingsByMatchday={Object.fromEntries(predictedStandingsByMatchday)}
+              onClose={() => {
+                setShowPredictionSummary(false);
+                // No need to clear matches/predictions since we might want to show them again
+              }}
+            />
+          );
+        })()}
       </div>
     </main>
   );

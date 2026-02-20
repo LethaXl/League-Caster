@@ -213,16 +213,14 @@ export const getMatches = async (leagueCode: string, matchday: number): Promise<
     
     const now = new Date();
     
-    // Filter matches that are scheduled and not in the past
+    // Filter matches: include scheduled/timed (future only) and postponed (always, so they show in predictions)
     return response.data.matches.filter((m: Match) => {
-      // Check match status - only include scheduled/timed matches
-      const validStatus = m.status === 'SCHEDULED' || m.status === 'TIMED';
-      
-      // Check match date - only include future matches
+      const isScheduledOrTimed = m.status === 'SCHEDULED' || m.status === 'TIMED';
+      const isPostponed = m.status === 'POSTPONED';
       const matchDate = new Date(m.utcDate);
       const isFutureMatch = matchDate > now;
-      
-      return validStatus && isFutureMatch;
+      // Include future scheduled/timed; always include postponed so they appear on the predictions card
+      return (isScheduledOrTimed && isFutureMatch) || isPostponed;
     }).map((match: Match) => {
       // Apply team name mappings
       return {
