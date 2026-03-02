@@ -6,7 +6,7 @@ import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
 import ModeSelection from '@/components/Predictions/ModeSelection';
 import PredictionSummary from '@/components/Predictions/PredictionSummary';
-import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings, getAllLeaguesData, processMatchPrediction, updateStandings } from '@/services/football-api';
+import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings, getAllLeaguesData, processMatchPrediction, updateStandings, shouldSkipMatchForStandings } from '@/services/football-api';
 import { Match } from '@/types/predictions';
 
 // Cache for team forms (shared with StandingsTable)
@@ -1170,6 +1170,7 @@ export default function Home() {
                 
                 // Process each match in this matchday, updating standings after each (same as processUnfilteredMatches)
                 for (const match of matchesForDay) {
+                  if (shouldSkipMatchForStandings(match, selectedLeague || '', matchday)) continue; // 2025/26 PL: Wolves vs Arsenal MD31 played early
                   // Only create prediction if match doesn't already have one
                   if (!predictionsMap.has(match.id)) {
                     const homeTeamStanding = currentStandings.find(s => s.team.id === match.homeTeam.id);
@@ -3150,29 +3151,29 @@ export default function Home() {
         
         {/* Prediction Summary Modal */}
         {showPredictionSummary && (() => {
-          // 2025/26 PL: show Wolves vs Arsenal MD31 as 2-2 draw (fixture played early, missing from API for MD31)
+          // 2025/26 PL: Wolves vs Arsenal MD31 display-only (fixture played early). Never add to main matches.
           const wolvesArsenalMatch = getWolvesArsenalMd31Match();
-          const includeWolvesArsenalMd31 = selectedLeague === 'PL' && is2025_26Season();
-          const summaryMatches = includeWolvesArsenalMd31 && !completedMatches.some(m => m.id === wolvesArsenalMatch.id)
-            ? [...completedMatches, wolvesArsenalMatch]
-            : completedMatches;
-          const summaryPredictions = includeWolvesArsenalMd31
-            ? new Map([
-                ...matchPredictions,
-                [wolvesArsenalMatch.id, { matchId: wolvesArsenalMatch.id, type: 'custom' as const, homeGoals: 2, awayGoals: 2 }],
-              ])
-            : matchPredictions;
+          const showWolvesArsenalMd31 =
+            selectedLeague === 'PL' &&
+            is2025_26Season() &&
+            (selectedTeamIds.includes(SEASON_2025_26_MD31_WOLVES_ARSENAL.homeTeamId) ||
+              selectedTeamIds.includes(SEASON_2025_26_MD31_WOLVES_ARSENAL.awayTeamId));
+
+          const displayOnlyMatches = showWolvesArsenalMd31 ? [wolvesArsenalMatch] : [];
+          const displayOnlyPredictions = showWolvesArsenalMd31
+            ? new Map([[wolvesArsenalMatch.id, { matchId: wolvesArsenalMatch.id, type: 'custom' as const, homeGoals: 2, awayGoals: 2 }]])
+            : new Map<number, Prediction>();
+
           return (
             <PredictionSummary
-              predictions={summaryPredictions}
-              matches={summaryMatches}
+              predictions={matchPredictions}
+              matches={completedMatches}
               selectedTeamIds={selectedTeamIds}
               standings={predictedStandings}
               standingsByMatchday={Object.fromEntries(predictedStandingsByMatchday)}
-              onClose={() => {
-                setShowPredictionSummary(false);
-                // No need to clear matches/predictions since we might want to show them again
-              }}
+              onClose={() => setShowPredictionSummary(false)}
+              displayOnlyMatches={displayOnlyMatches}
+              displayOnlyPredictions={displayOnlyPredictions}
             />
           );
         })()}

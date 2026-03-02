@@ -6,6 +6,15 @@ const LEAGUE_NAME_MAPPING: { [key: string]: string } = {
   // Add more mappings if needed
 };
 
+// 2025/26 PL: Wolves vs Arsenal MD31 was played early - skip when processing for standings to avoid double count
+export const shouldSkipMatchForStandings = (match: Match, leagueCode: string, matchday: number): boolean => {
+  if (leagueCode !== 'PL' || matchday !== 31) return false;
+  const now = new Date();
+  const is2025_26 = (now.getFullYear() === 2025 && now.getMonth() >= 7) || (now.getFullYear() === 2026 && now.getMonth() <= 6);
+  if (!is2025_26) return false;
+  return match.homeTeam?.id === 76 && match.awayTeam?.id === 57;
+};
+
 // Add team name mappings for display purposes
 const TEAM_NAME_MAPPING: { [key: string]: string } = {
   'Wolverhampton Wanderers FC': 'Wolves',

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Match, Prediction, PredictionType } from '@/types/predictions';
-import { getMatches, processMatchPrediction, updateStandings } from '@/services/football-api';
+import { getMatches, processMatchPrediction, updateStandings, shouldSkipMatchForStandings } from '@/services/football-api';
 import MatchPrediction from './MatchPrediction';
 import NoRaceMatches from './NoRaceMatches';
 import { Standing } from '@/services/football-api';
@@ -952,6 +952,9 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
           // Find matches that were filtered out (not involving selected teams) AND haven't been processed
           // CRITICAL: Only process matches from the current or completed matchdays, not future ones
           const unfilteredMatches = allMatches.filter(m => {
+            // 2025/26 PL: Skip Wolves vs Arsenal MD31 - played early, already counted elsewhere
+            if (shouldSkipMatchForStandings(m, leagueCode, matchday)) return false;
+
             // Check if match involves selected teams (these were already processed)
             const isHomeTeamSelected = selectedTeamIds.includes(m.homeTeam?.id);
             const isAwayTeamSelected = selectedTeamIds.includes(m.awayTeam?.id);
@@ -1296,6 +1299,7 @@ export default function PredictionForm({ leagueCode, initialStandings, initialMa
     const unplayedMatches = currentMatchday === MAX_MATCHDAY ? matches : filterAlreadyPlayedMatches(matches);
 
     unplayedMatches.forEach(match => {
+      if (shouldSkipMatchForStandings(match, leagueCode, currentMatchday)) return; // 2025/26 PL: Wolves vs Arsenal MD31 played early
       const prediction = predictions.get(match.id);
       if (prediction) {
         const [homeResult, awayResult] = processMatchPrediction(

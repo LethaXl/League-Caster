@@ -12,6 +12,9 @@ interface PredictionSummaryProps {
   standings: Standing[];
   standingsByMatchday?: Record<number, Standing[]>;
   onClose: () => void;
+  /** Display-only matches (e.g. hardcoded fixtures) - never used for standings, only for grid display */
+  displayOnlyMatches?: Match[];
+  displayOnlyPredictions?: Map<number, Prediction>;
 }
 
 export default function PredictionSummary({ 
@@ -20,7 +23,9 @@ export default function PredictionSummary({
   selectedTeamIds,
   standings,
   standingsByMatchday,
-  onClose 
+  onClose,
+  displayOnlyMatches = [],
+  displayOnlyPredictions = new Map(),
 }: PredictionSummaryProps) {
   const { isRaceMode, tableDisplayMode, setTableDisplayMode } = usePrediction();
   const [viewMode, setViewMode] = useState<'table' | 'summary'>('summary');
@@ -352,8 +357,8 @@ export default function PredictionSummary({
     return `${prediction.homeGoals}-${prediction.awayGoals}`;
   };
   
-  // Get all matchdays from the matches
-  const allAvailableMatchdays = [...new Set(matches.map(match => match.matchday || 0))].sort((a, b) => a - b);
+  // Get all matchdays from matches + display-only (so MD31 Wolves/Arsenal shows when needed)
+  const allAvailableMatchdays = [...new Set([...matches, ...displayOnlyMatches].map(match => match.matchday || 0))].sort((a, b) => a - b);
   
   // Get min and max available matchdays
   const minMatchday = allAvailableMatchdays.length > 0 ? Math.min(...allAvailableMatchdays) : 1;
@@ -597,8 +602,9 @@ export default function PredictionSummary({
     });
   });
   
-  // Populate the structure
-  matches.forEach(match => {
+  // Populate the structure (matches + display-only, never used for standings)
+  const allMatchesForDisplay = [...matches, ...displayOnlyMatches];
+  allMatchesForDisplay.forEach(match => {
     const matchday = match.matchday || 0;
     const homeTeamId = match.homeTeam.id;
     const awayTeamId = match.awayTeam.id;
@@ -1145,7 +1151,7 @@ export default function PredictionSummary({
                       {teamMatches.length > 0 ? (
                         <div className="space-y-0.5">
                           {teamMatches.map(match => {
-                            const prediction = predictions.get(match.id);
+                            const prediction = displayOnlyPredictions.get(match.id) ?? predictions.get(match.id);
                             const isHome = match.homeTeam.id === teamId;
                             const opponent = isHome ? match.awayTeam : match.homeTeam;
                             const isMobileTapExpand = isMobileSConstrainedView || isMobileMConstrainedView || isMobileLConstrainedView || isMobileXLConstrainedView;
@@ -1342,7 +1348,7 @@ export default function PredictionSummary({
                               {teamMatches.length > 0 ? (
                                 <div className="space-y-1">
                                   {teamMatches.map(match => {
-                                    const prediction = predictions.get(match.id);
+                                    const prediction = displayOnlyPredictions.get(match.id) ?? predictions.get(match.id);
                                     const isHome = match.homeTeam.id === teamId;
                                     const opponent = isHome ? match.awayTeam : match.homeTeam;
                                     
