@@ -517,6 +517,16 @@ export default function Home() {
     return selectedHistoricalMatchday !== null;
   };
 
+  const getCompareToggleLabel = (): string => {
+    if (isReplayForecast && (viewingFromMatchday !== null || isViewingStandings)) {
+      return getReplayCompareMatchday() !== null ? 'Compare to Actual' : 'Compare To Today';
+    }
+    if (viewingFromMatchday !== null) {
+      return `Compare to MD ${computeForecastEndMd()}`;
+    }
+    return 'Compare To Today';
+  };
+
   const loadActualStandingsForMatchday = async (matchday: number): Promise<boolean> => {
     if (!selectedLeague || !standings.length) return false;
 
@@ -3071,26 +3081,7 @@ export default function Home() {
                                       className="h-4 px-1.5 flex items-center rounded-r bg-card"
                                     >
                                       <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
-                                        {(() => {
-                                          if (isReplayForecast) {
-                                            return 'Compare to Actual';
-                                          }
-                                          if (viewingFromMatchday !== null) {
-                                            const forecastEndMd = computeForecastEndMd();
-                                            return `Compare to MD ${forecastEndMd}`;
-                                          }
-                                          if (
-                                            selectedLeague &&
-                                            isLeagueSeasonComplete(
-                                              selectedLeague,
-                                              currentMatchday,
-                                              standings
-                                            )
-                                          ) {
-                                            return 'Compare to Actual';
-                                          }
-                                          return 'Compare To Today';
-                                        })()}
+                                        {getCompareToggleLabel()}
                           </span>
                                     </div>
                                   </div>
@@ -3201,14 +3192,7 @@ export default function Home() {
                                       className="h-4 px-1.5 flex items-center rounded-r bg-card"
                                     >
                                       <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
-                                        {selectedLeague &&
-                                        isLeagueSeasonComplete(
-                                          selectedLeague,
-                                          currentMatchday,
-                                          standings
-                                        )
-                                          ? 'Compare to Actual'
-                                          : 'Compare To Today'}
+                                        {getCompareToggleLabel()}
                           </span>
                                     </div>
                                   </div>
