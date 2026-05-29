@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { cacheService } from '@/lib/cache/CacheService';
-import { getDevHttpsAgent } from '@/lib/http/httpsAgent';
 import { deriveCurrentMatchday } from '@/lib/matchday';
 import { Match } from '@/types/predictions';
 import { Standing } from '@/types/standings';

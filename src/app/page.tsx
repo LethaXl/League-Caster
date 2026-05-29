@@ -1560,7 +1560,7 @@ export default function Home() {
     }
     
     // Regular mode: merge localStorage + prefetched API matches for full-season form data
-    let allCompletedMatches = resolveCompletedMatchesForForms(selectedLeague);
+    const allCompletedMatches = resolveCompletedMatchesForForms(selectedLeague);
     
     // Special handling for MD1: ALWAYS run first, even if allCompletedMatches is empty
     // This ensures MD1 forms work for all leagues
