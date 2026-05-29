@@ -881,12 +881,11 @@ export default function StandingsTable({ standings, initialStandings, loading, l
                             })()
                           : fullSlots; // All 5 on desktop
                         
-                        // Unified loading condition for all bubbles
                         const isLoading = formsLoading || !formsReady;
                         
                         return visibleSlots.map((result, index) => {
-                          // Same loading check for all circles
-                          const isLoadingBubble = isLoading || result === null;
+                          // Only show loading state before forms are ready; empty slots are intentional
+                          const isLoadingBubble = isLoading || (!formsReady && result === null);
                           
                           // Determine color - same logic for all
                           let bgColor = 'bg-gray-600/30'; // Default placeholder color

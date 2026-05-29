@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { PredictionProvider } from "@/contexts/PredictionContext";
 import InitialStateCleaner from '@/components/InitialStateCleaner';
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://league-caster.vercel.app'),
@@ -113,7 +110,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body>
         <PredictionProvider>
           <InitialStateCleaner />
           {children}

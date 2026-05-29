@@ -6,7 +6,16 @@ import StandingsTable from '@/components/Standings/StandingsTable';
 import PredictionForm from '@/components/Predictions/PredictionForm';
 import ModeSelection from '@/components/Predictions/ModeSelection';
 import PredictionSummary from '@/components/Predictions/PredictionSummary';
-import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings, getAllLeaguesData, processMatchPrediction, updateStandings, shouldSkipMatchForStandings } from '@/services/football-api';
+import { getStandings, Standing, getCurrentMatchday, getMatches, getLeagueData, getCompletedMatchesUpToMatchday, calculateHistoricalStandings, getAllLeaguesData, getAllMatchesForMatchday, processMatchPrediction, updateStandings, shouldSkipMatchForStandings } from '@/services/football-api';
+import {
+  deriveCurrentMatchday,
+  reconcileCurrentMatchday,
+  getLeagueMaxMatchday,
+  getLiveStandingsLabel,
+  getFootballSeasonLabel,
+  isLeagueSeasonComplete,
+  setReplayForecastState,
+} from '@/lib/matchday';
 import { Match } from '@/types/predictions';
 
 // Cache for team forms (shared with StandingsTable)
@@ -169,19 +178,7 @@ const getWolvesArsenalMd31Match = (): Match => ({
   score: { fullTime: { home: 2, away: 2 } },
 });
 
-// Function to determine the max matchday for a league
-const getMaxMatchday = (leagueCode: string): number => {
-  // Bundesliga and Ligue 1 have 18 teams (34 matchdays)
-  if (leagueCode === 'BL1' || leagueCode === 'FL1') {
-    return 34;
-  }
-  // Champions League has league phase up to matchday 8 (25-26 season format)
-  if (leagueCode === 'CL') {
-    return 8;
-  }
-  // Premier League, La Liga, Serie A have 20 teams (38 matchdays)
-  return 38;
-};
+const getMaxMatchday = getLeagueMaxMatchday;
 
 // League info for header (copied from LeagueSelector)
 const LEAGUES = [
@@ -205,11 +202,14 @@ export default function Home() {
   const [showPredictionSummary, setShowPredictionSummary] = useState(false);
   const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
   const [matchPredictions, setMatchPredictions] = useState<Map<number, Prediction>>(new Map());
-  const [seasonOver, setSeasonOver] = useState(false); // Season is active
+  const [replayStartMatchday, setReplayStartMatchday] = useState(1);
+  const [isReplayForecast, setIsReplayForecast] = useState(false);
+  const [replayInitialStandings, setReplayInitialStandings] = useState<Standing[] | null>(null);
   const [selectedHistoricalMatchday, setSelectedHistoricalMatchday] = useState<number | null>(null);
   const [historicalStandings, setHistoricalStandings] = useState<Standing[]>([]);
   const [loadingHistorical, setLoadingHistorical] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isReplayMdDropdownOpen, setIsReplayMdDropdownOpen] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
   const [predictedStandingsByMatchday, setPredictedStandingsByMatchday] = useState<Map<number, Standing[]>>(new Map());
   const [teamForms, setTeamForms] = useState<Map<number, ('W' | 'D' | 'L')[]>>(new Map());
@@ -221,7 +221,10 @@ export default function Home() {
   const allMatchesCache = useRef<Map<string, Match[]>>(new Map()); // Per-league cache (all matches)
   const standingsCache = useRef<Map<string, Standing[]>>(new Map());
   const historicalStandingsCache = useRef<Map<string, Standing[]>>(new Map());
+  const historicalStandingsForMdRef = useRef<number | null>(null);
   const allCompletedMatchesCache = useRef<Map<string, Match[]>>(new Map()); // Cache all completed matches per league
+  const seasonDataReadyRef = useRef<Set<string>>(new Set());
+  const ensuringSeasonDataRef = useRef<Map<string, Promise<boolean>>>(new Map());
   const fetchingFormsRef = useRef<Map<string, boolean>>(new Map()); // Track ongoing form fetches to prevent duplicates
   const fetchingDataRef = useRef<string | null>(null); // Track ongoing data fetch to prevent duplicates
   
@@ -257,6 +260,7 @@ export default function Home() {
   const initializedRef = useRef(false);
   // Add state for responsive design
   const [isMobileLConstrainedView, setIsMobileLConstrainedView] = useState(false);
+  const [leaguesPrefetchReady, setLeaguesPrefetchReady] = useState(false);
 
   const {
     isViewingStandings,
@@ -378,131 +382,225 @@ export default function Home() {
   // Determine the max matchday for the currently selected league
   const maxMatchday = selectedLeague ? getMaxMatchday(selectedLeague) : 38;
 
+  const filterCompletedMatches = useCallback((matches: Match[]): Match[] => {
+    return matches.filter(
+      (match) =>
+        match.status === 'FINISHED' &&
+        match.score?.fullTime?.home !== null &&
+        match.score?.fullTime?.away !== null
+    );
+  }, []);
+
+  const seedMatchdayCachesFromAllMatches = useCallback((leagueCode: string, allMatches: Match[]) => {
+    const byMatchday = new Map<number, Match[]>();
+    for (const match of allMatches) {
+      if (match.matchday == null) continue;
+      const list = byMatchday.get(match.matchday) ?? [];
+      list.push(match);
+      byMatchday.set(match.matchday, list);
+    }
+    byMatchday.forEach((mdMatches, md) => {
+      try {
+        localStorage.setItem(`${leagueCode}_md${md}_all`, JSON.stringify(mdMatches));
+      } catch {
+        /* localStorage quota */
+      }
+      matchesCache.current.set(`${leagueCode}_md${md}`, mdMatches);
+    });
+  }, []);
+
+  const precomputeHistoricalStandings = useCallback(
+    (leagueCode: string, baseStandings: Standing[], completedMatches: Match[]) => {
+      const maxMd = getMaxMatchday(leagueCode);
+      for (let md = 1; md <= maxMd; md++) {
+        const upToMd = completedMatches.filter(
+          (m) => m.matchday !== undefined && m.matchday <= md
+        );
+        historicalStandingsCache.current.set(
+          `${leagueCode}-${md}`,
+          calculateHistoricalStandings(baseStandings, upToMd)
+        );
+      }
+    },
+    []
+  );
+
+  const warmSeasonDataCache = useCallback(
+    (leagueCode: string, baseStandings: Standing[], allMatches: Match[]) => {
+      if (!allMatches.length || !baseStandings.length) return;
+      allMatchesCache.current.set(leagueCode, allMatches);
+      const completed = filterCompletedMatches(allMatches);
+      allCompletedMatchesCache.current.set(leagueCode, completed);
+      seedMatchdayCachesFromAllMatches(leagueCode, allMatches);
+      precomputeHistoricalStandings(leagueCode, baseStandings, completed);
+      seasonDataReadyRef.current.add(leagueCode);
+    },
+    [filterCompletedMatches, seedMatchdayCachesFromAllMatches, precomputeHistoricalStandings]
+  );
+
+  /** One API call (or prefetch) caches the full season for replay — no per-MD fetches */
+  const ensureFullSeasonData = useCallback(
+    async (leagueCode: string, baseStandings: Standing[]): Promise<boolean> => {
+      if (!leagueCode || !baseStandings.length) return false;
+      if (seasonDataReadyRef.current.has(leagueCode)) return true;
+
+      const inFlight = ensuringSeasonDataRef.current.get(leagueCode);
+      if (inFlight) return inFlight;
+
+      const promise = (async () => {
+        try {
+          let allMatches = allMatchesCache.current.get(leagueCode) ?? [];
+          if (!allMatches.length) {
+            const maxMd = getMaxMatchday(leagueCode);
+            const fetched = await getCompletedMatchesUpToMatchday(leagueCode, maxMd);
+            if (fetched.length) {
+              allMatches = fetched;
+            }
+          }
+          if (!allMatches.length) return false;
+          warmSeasonDataCache(leagueCode, baseStandings, allMatches);
+          return true;
+        } finally {
+          ensuringSeasonDataRef.current.delete(leagueCode);
+        }
+      })();
+
+      ensuringSeasonDataRef.current.set(leagueCode, promise);
+      return promise;
+    },
+    [warmSeasonDataCache]
+  );
+
   // Helper function to compute forecastEndMd (single source of truth)
   // Priority: viewingFromMatchday > maxCompletedMd > lastFromMap > currentMatchday
   const computeForecastEndMd = (): number => {
     if (!selectedLeague) return currentMatchday;
     
-    // Normalize map keys to Numbers
     const mapKeys = Array.from(predictedStandingsByMatchday.keys()).map(Number);
     const lastFromMap = mapKeys.length > 0 ? Math.max(...mapKeys) : null;
     
-    // Get max completed matchday
     const completedMatchdays = JSON.parse(localStorage.getItem('completedMatchdays') || '{}');
     const currentCompleted = completedMatchdays[selectedLeague] || [];
     const maxCompletedMd = currentCompleted.length > 0 ? Math.max(...currentCompleted) : null;
+
+    // Replay: use latest forecast progress, not stale viewingFromMatchday
+    if (isReplayForecast) {
+      return Math.max(
+        replayStartMatchday,
+        viewingFromMatchday ?? replayStartMatchday,
+        maxCompletedMd ?? replayStartMatchday,
+        lastFromMap ?? replayStartMatchday
+      );
+    }
     
-    // Priority: viewingFromMatchday > maxCompletedMd > lastFromMap > currentMatchday
     return viewingFromMatchday ?? maxCompletedMd ?? lastFromMap ?? currentMatchday;
+  };
+
+  const getDisplayedMatchday = (): number => {
+    return selectedHistoricalMatchday ?? computeForecastEndMd();
+  };
+
+  // Replay: compare predicted vs actual for chosen start MD through latest forecast MD
+  const getReplayCompareMatchday = (): number | null => {
+    if (!isReplayForecast) return null;
+    const displayed = getDisplayedMatchday();
+    return displayed >= replayStartMatchday ? displayed : null;
+  };
+
+  const shouldShowCompareToggle = (): boolean => {
+    if (isReplayForecast && (viewingFromMatchday !== null || isViewingStandings)) {
+      return getDisplayedMatchday() >= replayStartMatchday;
+    }
+    if (viewingFromMatchday !== null || isViewingStandings) {
+      return selectedHistoricalMatchday !== null;
+    }
+    return selectedHistoricalMatchday !== null;
+  };
+
+  const loadActualStandingsForMatchday = async (matchday: number): Promise<boolean> => {
+    if (!selectedLeague || !standings.length) return false;
+
+    const cacheKey = `${selectedLeague}-${matchday}`;
+    const cachedStandings = historicalStandingsCache.current.get(cacheKey);
+    if (cachedStandings && cachedStandings.length > 0) {
+      setHistoricalStandings(cachedStandings);
+      historicalStandingsForMdRef.current = matchday;
+      return true;
+    }
+
+    if (!seasonDataReadyRef.current.has(selectedLeague)) {
+      await ensureFullSeasonData(selectedLeague, standings);
+    }
+
+    const afterWarm = historicalStandingsCache.current.get(cacheKey);
+    if (afterWarm && afterWarm.length > 0) {
+      setHistoricalStandings(afterWarm);
+      historicalStandingsForMdRef.current = matchday;
+      return true;
+    }
+
+    const allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
+    if (!allCompletedMatches?.length) {
+      return false;
+    }
+
+    const completedMatchesUpToMatchday = allCompletedMatches.filter(
+      (match: Match) => match.matchday !== undefined && match.matchday <= matchday
+    );
+    const calculatedStandings = calculateHistoricalStandings(standings, completedMatchesUpToMatchday);
+    historicalStandingsCache.current.set(cacheKey, calculatedStandings);
+    setHistoricalStandings(calculatedStandings);
+    historicalStandingsForMdRef.current = matchday;
+    return true;
   };
 
   // Handle historical matchday selection
   const handleHistoricalMatchdayChange = async (matchday: number | null) => {
     if (!selectedLeague || !standings.length) return;
     
-    // Guard: do nothing if matchday hasn't changed
     setSelectedHistoricalMatchday(prev => {
       if (prev === matchday) return prev;
       return matchday;
     });
     
-    // Early return if matchday hasn't actually changed
-    if (selectedHistoricalMatchday === matchday) return;
-    
-    // In forecast mode, automatically enable comparison when selecting a historical matchday
-    if (viewingFromMatchday !== null && matchday !== null) {
-      setIsComparing(prev => prev === true ? prev : true); // Only update if not already true
-    } else if (matchday === null) {
-      setIsComparing(prev => prev === false ? prev : false); // Only update if not already false
-    }
-    // In regular mode, preserve the isComparing state when switching between matchdays
-    // (don't reset it - let the user's checkbox preference persist)
-    
-    if (matchday === null) {
-      // Don't clear to empty array - keep previous standings to prevent flicker
-      // The table will use current standings when matchday is null
-      return;
-    }
-    
-    // In forecast mode, check for saved predicted standings first (for ALL matchdays)
-    // This is the saved state per matchday that was working before
-    if (viewingFromMatchday !== null && matchday !== null) {
-      const savedPredictedStandings = predictedStandingsByMatchday.get(Number(matchday));
-      if (savedPredictedStandings && savedPredictedStandings.length > 0) {
-        // Use saved predicted standings instead of calculating from completed matches
-        // Don't clear historical standings - just don't use them, prevents flicker
+    if (selectedHistoricalMatchday === matchday) {
+      if (matchday === null) return;
+      const cacheKey = `${selectedLeague}-${matchday}`;
+      const cached = historicalStandingsCache.current.get(cacheKey);
+      if (cached && cached.length > 0) {
+        if (historicalStandings.length === 0 || historicalStandingsForMdRef.current !== matchday) {
+          setHistoricalStandings(cached);
+          historicalStandingsForMdRef.current = matchday;
+        }
         return;
       }
-      // If no saved predicted standings, continue to calculate historical standings from completed matches
+      if (historicalStandings.length > 0 && historicalStandingsForMdRef.current === matchday) return;
     }
     
-    // Check cache first for calculated standings
-    const cacheKey = `${selectedLeague}-${matchday}`;
-    const cachedStandings = historicalStandingsCache.current.get(cacheKey);
+    if (viewingFromMatchday !== null && matchday !== null) {
+      if (isReplayForecast) {
+        if (matchday < replayStartMatchday) {
+          setIsComparing(false);
+        }
+      } else {
+        setIsComparing(prev => (prev === true ? prev : true));
+      }
+    } else if (matchday === null && viewingFromMatchday !== null && !isReplayForecast) {
+      setIsComparing(prev => (prev === false ? prev : false));
+    }
     
-    if (cachedStandings) {
-      // Use cached data
-      setHistoricalStandings(cachedStandings);
+    if (matchday === null) {
       return;
     }
     
-    // Check if we have all completed matches cached for this league
-    // Try to get matches from cache first (from all_leagues prefetch)
-    let allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague);
-    
-    if (!allCompletedMatches) {
-      // Try to get from allMatchesCache (prefetched from all_leagues)
-      const cachedMatches = getCachedMatches(selectedLeague);
-      if (cachedMatches && cachedMatches.length > 0) {
-        // Filter for completed matches only
-        const completed = cachedMatches.filter(
-          (match: Match) =>
-            match.status === 'FINISHED' &&
-            match.score?.fullTime?.home !== null &&
-            match.score?.fullTime?.away !== null
-        );
-        allCompletedMatches = completed;
-        // Cache for future use
-        allCompletedMatchesCache.current.set(selectedLeague, completed);
-      } else {
-        // Fallback: Fetch from API only if not in cache
-        setLoadingHistorical(true);
-        
-        const timeoutId = setTimeout(() => {
-          setError('Request timed out. Please try again.');
-          setLoadingHistorical(false);
-        }, 15000);
-        
-        try {
-          // Fetch all matches up to max matchday to get all completed matches
-          allCompletedMatches = await getCompletedMatchesUpToMatchday(selectedLeague, maxMatchday);
-          // Cache all completed matches for this league
-          allCompletedMatchesCache.current.set(selectedLeague, allCompletedMatches);
-          clearTimeout(timeoutId);
-        } catch (error) {
-          clearTimeout(timeoutId);
-          console.error('Error fetching all completed matches:', error);
-          setError('Failed to load historical standings. Please try again.');
-          setLoadingHistorical(false);
-          return;
-        } finally {
-          setLoadingHistorical(false);
-        }
+    if (viewingFromMatchday !== null && matchday !== null && !isReplayForecast) {
+      const savedPredictedStandings = predictedStandingsByMatchday.get(Number(matchday));
+      if (savedPredictedStandings && savedPredictedStandings.length > 0) {
+        return;
       }
     }
     
-    // Filter matches up to the selected matchday
-    const completedMatchesUpToMatchday = (allCompletedMatches || []).filter(
-      (match: Match) => match.matchday !== undefined && match.matchday <= matchday
-    );
-    
-    // Calculate historical standings from filtered matches
-    const calculatedStandings = calculateHistoricalStandings(standings, completedMatchesUpToMatchday);
-    
-    // Cache the calculated standings for this specific matchday
-    historicalStandingsCache.current.set(cacheKey, calculatedStandings);
-    
-    setHistoricalStandings(calculatedStandings);
+    await loadActualStandingsForMatchday(matchday);
   };
   
   // Check if we're at the final matchday for the current league
@@ -588,6 +686,34 @@ export default function Home() {
     }
   }, [isViewingStandings, viewingFromMatchday, predictedStandingsByMatchday, currentMatchday, selectedLeague, isComparing, selectedHistoricalMatchday]);
 
+  // Load real standings at displayed MD for replay "compare to actual"
+  useEffect(() => {
+    if (!isReplayForecast || !isComparing || viewingFromMatchday === null || !selectedLeague) {
+      return;
+    }
+    const targetMd = getReplayCompareMatchday();
+    if (targetMd === null) {
+      return;
+    }
+    if (
+      historicalStandingsForMdRef.current === targetMd &&
+      historicalStandings.length > 0
+    ) {
+      return;
+    }
+    void loadActualStandingsForMatchday(targetMd);
+  }, [
+    isReplayForecast,
+    isComparing,
+    viewingFromMatchday,
+    selectedHistoricalMatchday,
+    selectedLeague,
+    historicalStandings.length,
+    predictedStandingsByMatchday,
+    currentMatchday,
+    replayStartMatchday,
+  ]);
+
   // Calculate team forms from completed matches and standings
   // Helper function to convert prediction to match result (W/D/L) for a team
   const getPredictionResult = useCallback((prediction: Prediction, teamId: number, match: Match): 'W' | 'D' | 'L' | null => {
@@ -656,6 +782,48 @@ export default function Home() {
     
     return allMatches;
   }, []);
+
+  const isCompletedMatchWithScore = useCallback((match: Match): boolean => {
+    if (match.matchday === undefined || match.matchday === null) return false;
+    return (
+      match.status === 'FINISHED' &&
+      match.score?.fullTime?.home !== null &&
+      match.score?.fullTime?.away !== null
+    );
+  }, []);
+
+  // Merge prefetched API matches with localStorage; prefer the fullest dataset for form bubbles
+  const resolveCompletedMatchesForForms = useCallback((leagueCode: string): Match[] => {
+    const localStorageMatches = getCompletedMatchesFromLocalStorage(leagueCode);
+    const cachedAllMatches = getCachedMatches(leagueCode);
+    const cachedCompleted = cachedAllMatches
+      ? cachedAllMatches.filter(isCompletedMatchWithScore)
+      : [];
+
+    const byId = new Map<number, Match>();
+    for (const match of [...localStorageMatches, ...cachedCompleted]) {
+      byId.set(match.id, match);
+    }
+    const merged = Array.from(byId.values());
+
+    if (merged.length > 0) {
+      allCompletedMatchesCache.current.set(leagueCode, merged);
+      if (process.env.NODE_ENV === 'development') {
+        const matchdayCounts = new Map<number, number>();
+        merged.forEach((m) => {
+          const md = m.matchday || 0;
+          matchdayCounts.set(md, (matchdayCounts.get(md) || 0) + 1);
+        });
+        const matchdays = Array.from(matchdayCounts.keys()).sort((a, b) => a - b);
+        console.log(
+          `[Forms] ${leagueCode}: Using ${merged.length} completed matches (localStorage: ${localStorageMatches.length}, cache: ${cachedCompleted.length}). Matchdays: ${matchdays.join(', ')}`
+        );
+      }
+      return merged;
+    }
+
+    return allCompletedMatchesCache.current.get(leagueCode) || [];
+  }, [getCompletedMatchesFromLocalStorage, getCachedMatches, isCompletedMatchWithScore]);
 
   // Helper function to get predicted matches from localStorage up to a matchday
   const getPredictedMatchesUpToMatchday = useCallback((leagueCode: string, upToMatchday: number): Match[] => {
@@ -810,16 +978,26 @@ export default function Home() {
       if (standingsCache.current.has(combinedCacheKey) && matchdayCache.current.has(combinedCacheKey)) {
         // If both standings and current matchday are already cached, use them
         standingsData = standingsCache.current.get(combinedCacheKey)!;
-        currentMatchdayData = matchdayCache.current.get(combinedCacheKey)!;
+        const cachedMatches = allMatchesCache.current.get(combinedCacheKey);
+        const maxPlayed = standingsData.length
+          ? Math.max(...standingsData.map((s) => s.playedGames))
+          : undefined;
+        currentMatchdayData = cachedMatches?.length
+          ? deriveCurrentMatchday(selectedLeague, cachedMatches)
+          : reconcileCurrentMatchday(
+              matchdayCache.current.get(combinedCacheKey)!,
+              [],
+              selectedLeague,
+              maxPlayed
+            );
+        matchdayCache.current.set(combinedCacheKey, currentMatchdayData);
         
         // Update standings map for this league
         setStandingsByLeague(prev => ({
           ...prev,
           [selectedLeague]: standingsData
         }));
-        if (predictedStandings.length === 0) {
-          setCurrentMatchday(currentMatchdayData);
-        }
+        setCurrentMatchday(currentMatchdayData);
         clearTimeout(timeoutId);
       } else {
         // Otherwise, use the combined endpoint to fetch both at once
@@ -832,7 +1010,13 @@ export default function Home() {
           const { standings: fetchedStandings, currentMatchday: fetchedMatchday } = await leagueDataPromise;
           
           standingsData = fetchedStandings;
-          currentMatchdayData = fetchedMatchday;
+          const maxPlayed = fetchedStandings.length
+            ? Math.max(...fetchedStandings.map((s) => s.playedGames))
+            : undefined;
+          const prefetchedMatches = allMatchesCache.current.get(selectedLeague);
+          currentMatchdayData = prefetchedMatches?.length
+            ? deriveCurrentMatchday(selectedLeague, prefetchedMatches)
+            : reconcileCurrentMatchday(fetchedMatchday, [], selectedLeague, maxPlayed);
           
           // Cache the results
           standingsCache.current.set(combinedCacheKey, standingsData);
@@ -843,9 +1027,7 @@ export default function Home() {
             ...prev,
             [selectedLeague]: standingsData
           }));
-          if (predictedStandings.length === 0) {
-            setCurrentMatchday(currentMatchdayData);
-          }
+          setCurrentMatchday(currentMatchdayData);
           clearTimeout(timeoutId);
         } catch (error: unknown) {
           const err = error as ApiError;
@@ -894,9 +1076,7 @@ export default function Home() {
             ...prev,
             [selectedLeague]: standingsData
           }));
-          if (predictedStandings.length === 0) {
-            setCurrentMatchday(currentMatchdayData);
-          }
+          setCurrentMatchday(currentMatchdayData);
           clearTimeout(timeoutId);
         }
       }
@@ -930,7 +1110,7 @@ export default function Home() {
       setLoading(false);
       fetchingDataRef.current = null;
     }
-  }, [selectedLeague, predictedStandings.length, setCurrentMatchday, calculateTeamForms]);
+  }, [selectedLeague, setCurrentMatchday]);
 
   // Pre-fetch all leagues data on initial load (single API call)
   useEffect(() => {
@@ -956,15 +1136,20 @@ export default function Home() {
             [leagueCode]: leagueData.standings
           }));
           
+          const resolvedMatchday =
+            leagueData.matches && leagueData.matches.length > 0
+              ? deriveCurrentMatchday(leagueCode, leagueData.matches)
+              : leagueData.currentMatchday;
+
           // Cache current matchday
-          matchdayCache.current.set(leagueCode, leagueData.currentMatchday);
+          matchdayCache.current.set(leagueCode, resolvedMatchday);
           
           // Cache ALL matches for this league (for forms and historical data)
           if (leagueData.matches && leagueData.matches.length > 0) {
-            allMatchesCache.current.set(leagueCode, leagueData.matches);
-            console.log(`✅ Pre-cached ${leagueCode}: ${leagueData.standings.length} teams, matchday ${leagueData.currentMatchday}, ${leagueData.matches.length} matches`);
+            warmSeasonDataCache(leagueCode, leagueData.standings, leagueData.matches);
+            console.log(`✅ Pre-cached ${leagueCode}: ${leagueData.standings.length} teams, matchday ${resolvedMatchday}, ${leagueData.matches.length} matches`);
           } else {
-            console.log(`✅ Pre-cached ${leagueCode}: ${leagueData.standings.length} teams, matchday ${leagueData.currentMatchday}`);
+            console.log(`✅ Pre-cached ${leagueCode}: ${leagueData.standings.length} teams, matchday ${resolvedMatchday}`);
           }
         });
         
@@ -972,21 +1157,30 @@ export default function Home() {
       } catch (error) {
         console.error('Error pre-fetching all leagues:', error);
         // Don't show error to user - individual league fetches will still work
+      } finally {
+        setLeaguesPrefetchReady(true);
       }
     };
     
     // Only prefetch once on mount
     prefetchAllLeagues();
-  }, []); // Empty dependency array - run once on mount
+  }, [warmSeasonDataCache]);
 
   useEffect(() => {
     if (!selectedLeague) return;
     
     // Reset historical matchday when league changes
+    seasonDataReadyRef.current.clear();
+    ensuringSeasonDataRef.current.clear();
     setSelectedHistoricalMatchday(null);
     setHistoricalStandings([]);
     setIsDropdownOpen(false);
+    setIsReplayMdDropdownOpen(false);
     setViewingFromMatchday(null); // Reset viewing matchday when switching leagues
+    setReplayStartMatchday(1);
+    setIsReplayForecast(false);
+    setReplayInitialStandings(null);
+    setReplayForecastState(null);
     setTeamForms(new Map());
     setFormsLoading(false);
     // Clear form fetching refs when league changes
@@ -999,6 +1193,40 @@ export default function Home() {
     
     fetchData();
   }, [selectedLeague, fetchData]);
+
+  // Keep currentMatchday in sync after prefetch (end-of-season API used to return 1)
+  useEffect(() => {
+    if (!selectedLeague || showPredictions || viewingFromMatchday !== null) return;
+    const leagueStandings = standingsByLeague[selectedLeague];
+    if (!leagueStandings?.length) return;
+
+    const matches = allMatchesCache.current.get(selectedLeague);
+    const maxPlayed = Math.max(...leagueStandings.map((s) => s.playedGames));
+    const resolved = matches?.length
+      ? deriveCurrentMatchday(selectedLeague, matches)
+      : reconcileCurrentMatchday(currentMatchday, [], selectedLeague, maxPlayed);
+
+    if (resolved > 1 && resolved !== currentMatchday) {
+      matchdayCache.current.set(selectedLeague, resolved);
+      setCurrentMatchday(resolved);
+    }
+  }, [selectedLeague, leaguesPrefetchReady, standingsByLeague, showPredictions, viewingFromMatchday, currentMatchday, setCurrentMatchday]);
+
+  // Warm full-season cache when league season is over (instant replay / compare / forms)
+  useEffect(() => {
+    if (!selectedLeague || !leaguesPrefetchReady) return;
+    const leagueStandings = standingsByLeague[selectedLeague];
+    if (!leagueStandings?.length) return;
+    if (!isLeagueSeasonComplete(selectedLeague, currentMatchday, leagueStandings)) return;
+    if (seasonDataReadyRef.current.has(selectedLeague)) return;
+    void ensureFullSeasonData(selectedLeague, leagueStandings);
+  }, [
+    selectedLeague,
+    leaguesPrefetchReady,
+    standingsByLeague,
+    currentMatchday,
+    ensureFullSeasonData,
+  ]);
   
   // Fetch forms when historical matchday changes or when viewing historical standings
   useEffect(() => {
@@ -1026,7 +1254,7 @@ export default function Home() {
     
     if (!targetMatchday) return;
     
-    const formsCacheKey = `${selectedLeague}_${targetMatchday}_${isForecastMode ? 'forecast' : 'actual'}`;
+    const formsCacheKey = `${selectedLeague}_${targetMatchday}_${isForecastMode ? 'forecast' : 'actual'}_${leaguesPrefetchReady ? 'full' : 'partial'}`;
     const cachedForms = getCachedForms(formsCacheKey);
     
     // Only reuse cache in regular (non forecast) mode
@@ -1290,23 +1518,18 @@ export default function Home() {
         // Calculate forms with real + predicted matches
         calculateForecastForms(realMatches);
       } else {
-        // Try localStorage first (no API call!)
-        // Get all matches from localStorage, then filter by matchday later
-        const localStorageMatches = getCompletedMatchesFromLocalStorage(selectedLeague);
-        
-        if (localStorageMatches.length > 0) {
-          // Cache the matches from localStorage
-          allCompletedMatchesCache.current.set(selectedLeague, localStorageMatches);
-          
-          // Filter only finished matches with scores
-          const realMatches = localStorageMatches.filter(
-            (match: Match) => 
+        const mergedMatches = resolveCompletedMatchesForForms(selectedLeague);
+
+        if (mergedMatches.length > 0) {
+          const realMatches = mergedMatches.filter(
+            (match: Match) =>
+              match.matchday !== undefined &&
+              match.matchday <= maxRealMatchday &&
               match.status === 'FINISHED' &&
               match.score?.fullTime?.home !== null &&
               match.score?.fullTime?.away !== null
           );
-          
-          // Calculate forms with real + predicted matches
+
           calculateForecastForms(realMatches);
         } else {
           // Only fetch from API as last resort (if no cache and no localStorage)
@@ -1336,68 +1559,8 @@ export default function Home() {
       return;
     }
     
-    // Regular mode: use completed matches
-    // Priority order:
-    // 1. Try localStorage first (most reliable - has all matchdays from previous sessions)
-    // 2. Try allMatchesCache (from all_leagues prefetch - might not have all historical matchdays)
-    // 3. Fallback to allCompletedMatchesCache
-    
-    // First, try localStorage (most complete source for historical matchdays)
-    // Get ALL matches from localStorage (not just up to targetMatchday) to ensure completeness
-    const localStorageMatches = getCompletedMatchesFromLocalStorage(selectedLeague);
-    let allCompletedMatches: Match[] = [];
-    
-    if (localStorageMatches.length > 0) {
-      // localStorage has matches - use it and cache for future use
-      allCompletedMatches = localStorageMatches;
-      allCompletedMatchesCache.current.set(selectedLeague, localStorageMatches);
-      
-      if (process.env.NODE_ENV === 'development') {
-        const matchdayCounts = new Map<number, number>();
-        localStorageMatches.forEach(m => {
-          const md = m.matchday || 0;
-          matchdayCounts.set(md, (matchdayCounts.get(md) || 0) + 1);
-        });
-        const matchdays = Array.from(matchdayCounts.keys()).sort((a, b) => a - b);
-        console.log(`[Forms] ${selectedLeague}: Loaded ${localStorageMatches.length} matches from localStorage. Matchdays: ${matchdays.join(', ')}`);
-      }
-    } else {
-      // localStorage doesn't have matches, try allMatchesCache
-      const cachedAllMatches = getCachedMatches(selectedLeague);
-      
-      if (cachedAllMatches && cachedAllMatches.length > 0) {
-        // Filter for completed matches only from the full match list
-        // IMPORTANT: Only include matches that are finished AND have valid scores AND have a matchday
-        allCompletedMatches = cachedAllMatches.filter(
-          (match: Match) => {
-            // Must have matchday set (critical for historical matchdays)
-            if (match.matchday === undefined || match.matchday === null) {
-              return false;
-            }
-            // Must be finished with scores
-            return match.status === 'FINISHED' &&
-              match.score?.fullTime?.home !== null &&
-              match.score?.fullTime?.away !== null;
-          }
-        );
-        // Update cache for future use
-        allCompletedMatchesCache.current.set(selectedLeague, allCompletedMatches);
-        
-        // Debug: Log what we found
-        if (process.env.NODE_ENV === 'development') {
-          const matchdayCounts = new Map<number, number>();
-          allCompletedMatches.forEach(m => {
-            const md = m.matchday || 0;
-            matchdayCounts.set(md, (matchdayCounts.get(md) || 0) + 1);
-          });
-          const matchdays = Array.from(matchdayCounts.keys()).sort((a, b) => a - b);
-          console.log(`[Forms] ${selectedLeague}: Loaded ${allCompletedMatches.length} completed matches from allMatchesCache. Matchdays: ${matchdays.join(', ')}`);
-        }
-      } else {
-        // Fallback to allCompletedMatchesCache if allMatchesCache doesn't have data
-        allCompletedMatches = allCompletedMatchesCache.current.get(selectedLeague) || [];
-      }
-    }
+    // Regular mode: merge localStorage + prefetched API matches for full-season form data
+    let allCompletedMatches = resolveCompletedMatchesForForms(selectedLeague);
     
     // Special handling for MD1: ALWAYS run first, even if allCompletedMatches is empty
     // This ensures MD1 forms work for all leagues
@@ -1565,6 +1728,12 @@ export default function Home() {
     fetchingFormsRef.current.set(formsCacheKey, true);
     setFormsLoading(true);
     
+    if (seasonDataReadyRef.current.has(selectedLeague)) {
+      setFormsLoading(false);
+      fetchingFormsRef.current.delete(formsCacheKey);
+      return;
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log(`[Forms] ${selectedLeague} MD ${targetMatchday}: Fetching from API (cache miss or no matches for target matchday)`);
     }
@@ -1665,25 +1834,91 @@ export default function Home() {
           }
         }
       });
-  }, [selectedLeague, standings, currentMatchday, selectedHistoricalMatchday, viewingFromMatchday, predictedStandingsByMatchday, calculateTeamForms, getPredictedMatchesUpToMatchday, getCompletedMatchesFromLocalStorage]);
+  }, [selectedLeague, standings, currentMatchday, selectedHistoricalMatchday, viewingFromMatchday, predictedStandingsByMatchday, calculateTeamForms, getPredictedMatchesUpToMatchday, getCompletedMatchesFromLocalStorage, resolveCompletedMatchesForForms, leaguesPrefetchReady]);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside (use click, not mousedown, so toggle still works)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (isDropdownOpen && !target.closest('.historical-dropdown-container')) {
         setIsDropdownOpen(false);
       }
+      if (isReplayMdDropdownOpen && !target.closest('.replay-md-dropdown-container')) {
+        setIsReplayMdDropdownOpen(false);
+      }
     };
 
-    if (isDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+    if (isDropdownOpen || isReplayMdDropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
     };
-  }, [isDropdownOpen]);
+  }, [isDropdownOpen, isReplayMdDropdownOpen]);
+
+  const getReplayFixturesFromCache = (leagueCode: string, matchday: number): Match[] => {
+    try {
+      const stored = localStorage.getItem(`${leagueCode}_md${matchday}_all`);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Match[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    const cachedAll = allMatchesCache.current.get(leagueCode);
+    if (cachedAll?.length) {
+      const fromCache = cachedAll.filter((m) => m.matchday === matchday);
+      if (fromCache.length > 0) {
+        try {
+          localStorage.setItem(`${leagueCode}_md${matchday}_all`, JSON.stringify(fromCache));
+        } catch {
+          /* ignore */
+        }
+        return fromCache;
+      }
+    }
+    return [];
+  };
+
+  const loadMatchdayFixturesForReplay = async (leagueCode: string, matchday: number): Promise<Match[]> => {
+    const fromCache = getReplayFixturesFromCache(leagueCode, matchday);
+    if (fromCache.length > 0) {
+      return fromCache;
+    }
+    const fetched = await getAllMatchesForMatchday(leagueCode, matchday);
+    if (fetched.length > 0) {
+      try {
+        localStorage.setItem(`${leagueCode}_md${matchday}_all`, JSON.stringify(fetched));
+      } catch {
+        /* ignore */
+      }
+    }
+    return fetched;
+  };
+
+  const computeReplayInitialStandings = (
+    baseStandings: Standing[],
+    leagueCode: string,
+    startMd: number
+  ): Standing[] => {
+    if (startMd <= 1) {
+      return calculateHistoricalStandings(baseStandings, []);
+    }
+    const cachedAll = allMatchesCache.current.get(leagueCode) ?? [];
+    const completedBefore = cachedAll.filter(
+      (m) =>
+        m.matchday !== undefined &&
+        m.matchday < startMd &&
+        m.status === 'FINISHED' &&
+        m.score?.fullTime?.home !== null &&
+        m.score?.fullTime?.away !== null
+    );
+    return calculateHistoricalStandings(baseStandings, completedBefore);
+  };
 
   const handleStartPredictions = async () => {
     if (!selectedLeague) return;
@@ -1697,108 +1932,115 @@ export default function Home() {
     
     // Clear any saved prediction state for a clean start
     localStorage.removeItem('predictionState');
+    localStorage.removeItem(`predictions_${selectedLeague}`);
     
     // Clear forecast forms cache when starting new predictions
-    // This ensures old forms from previous predictions don't show up
     clearForecastFormsCache(selectedLeague);
     
+    setIsReplayMdDropdownOpen(false);
     setLoading(true);
     setError(null);
     
-    // Add a timeout to prevent infinite loading spinner
     const timeoutId = setTimeout(() => {
       setError('Request timed out. API may be rate limited. Please try again later.');
       setLoading(false);
-    }, 15000); // 15 seconds timeout
+    }, 15000);
+    
+    const seasonComplete = isLeagueSeasonComplete(selectedLeague, currentMatchday, standings);
     
     try {
-      // Use cache when possible
-      const matchdayCacheKey = selectedLeague;
-      
-      // Get current matchday (from cache if available)
-      let currentMatchdayPromise: Promise<number>;
-      if (matchdayCache.current.has(matchdayCacheKey)) {
-        currentMatchdayPromise = Promise.resolve(matchdayCache.current.get(matchdayCacheKey)!);
-      } else {
-        currentMatchdayPromise = getCurrentMatchday(selectedLeague);
+      // End of season: show mode selection first; load fixtures when user picks a mode
+      if (seasonComplete) {
+        resetPredictions();
+        setIsReplayForecast(true);
+        setReplayStartMatchday(1);
+        setReplayInitialStandings(null);
+        setReplayForecastState(null);
+        setInitialMatches([]);
+        void ensureFullSeasonData(selectedLeague, standings);
+        setShowModeSelection(true);
+        setShowPredictions(false);
+        clearTimeout(timeoutId);
+        setLoading(false);
+        return;
       }
+
+      setReplayForecastState(null);
+      setIsReplayForecast(false);
+      setReplayInitialStandings(null);
       
-      // Resolve the current matchday
-      const currentMatchdayData = await currentMatchdayPromise;
+      let targetMatchday: number;
+      let matches: Match[];
       
-      // Cache the current matchday if needed
-      if (!matchdayCache.current.has(matchdayCacheKey)) {
-        matchdayCache.current.set(matchdayCacheKey, currentMatchdayData);
-      }
-      
-      // Check if there are matches for this matchday
-      const matchesCacheKey = `${selectedLeague}_md${currentMatchdayData}`;
-      let matchesPromise: Promise<Match[]>;
-      
-      if (matchesCache.current.has(matchesCacheKey)) {
-        matchesPromise = Promise.resolve(matchesCache.current.get(matchesCacheKey)!);
-      } else {
-        matchesPromise = getMatches(selectedLeague, currentMatchdayData);
-      }
-      
-      // Resolve the matches
-      let matches = await matchesPromise;
-      
-      // Cache the matches if needed
-      if (!matchesCache.current.has(matchesCacheKey)) {
-        matchesCache.current.set(matchesCacheKey, matches);
-      }
-      
-      // If no matches found for the current matchday, find a matchday with matches
-      let targetMatchday = currentMatchdayData;
-      
-      if (matches.length === 0) {
-        // Try just a few matchdays (most likely to have matches) - limit API calls
-        const matchdaysToCheck = [
-          currentMatchdayData + 1,
-          currentMatchdayData + 2,
-          currentMatchdayData - 1,
-          currentMatchdayData - 2
-        ].filter(md => md >= 1 && md <= getMaxMatchday(selectedLeague));
+      {
+        const matchdayCacheKey = selectedLeague;
         
-        // Try to get from allMatchesCache first (from all_leagues prefetch)
-        const cachedAllMatches = getCachedMatches(selectedLeague);
+        let currentMatchdayPromise: Promise<number>;
+        if (matchdayCache.current.has(matchdayCacheKey)) {
+          currentMatchdayPromise = Promise.resolve(matchdayCache.current.get(matchdayCacheKey)!);
+        } else {
+          currentMatchdayPromise = getCurrentMatchday(selectedLeague);
+        }
         
-        // Create an array of promises for all matchdays to check
-        const matchPromises = matchdaysToCheck.map(async (md) => {
-          if (cachedAllMatches && cachedAllMatches.length > 0) {
-            // Filter from cached matches
-            const mdMatches = cachedAllMatches.filter((m: Match) => m.matchday === md);
-            return { md, matches: mdMatches };
-          } else {
-            // Fallback: use per-matchday cache or fetch from API
+        const currentMatchdayData = await currentMatchdayPromise;
+        
+        if (!matchdayCache.current.has(matchdayCacheKey)) {
+          matchdayCache.current.set(matchdayCacheKey, currentMatchdayData);
+        }
+        
+        const matchesCacheKey = `${selectedLeague}_md${currentMatchdayData}`;
+        let matchesPromise: Promise<Match[]>;
+        
+        if (matchesCache.current.has(matchesCacheKey)) {
+          matchesPromise = Promise.resolve(matchesCache.current.get(matchesCacheKey)!);
+        } else {
+          matchesPromise = getMatches(selectedLeague, currentMatchdayData);
+        }
+        
+        matches = await matchesPromise;
+        
+        if (!matchesCache.current.has(matchesCacheKey)) {
+          matchesCache.current.set(matchesCacheKey, matches);
+        }
+        
+        targetMatchday = currentMatchdayData;
+        
+        if (matches.length === 0) {
+          const matchdaysToCheck = [
+            currentMatchdayData + 1,
+            currentMatchdayData + 2,
+            currentMatchdayData - 1,
+            currentMatchdayData - 2,
+          ].filter((md) => md >= 1 && md <= getMaxMatchday(selectedLeague));
+          
+          const cachedAllMatches = getCachedMatches(selectedLeague);
+          
+          const matchPromises = matchdaysToCheck.map(async (md) => {
+            if (cachedAllMatches && cachedAllMatches.length > 0) {
+              const mdMatches = cachedAllMatches.filter((m: Match) => m.matchday === md);
+              return { md, matches: mdMatches };
+            }
             const mdCacheKey = `${selectedLeague}_md${md}`;
             if (matchesCache.current.has(mdCacheKey)) {
               return { md, matches: matchesCache.current.get(mdCacheKey)! };
-            } else {
-              const mdMatches = await getMatches(selectedLeague, md);
-              matchesCache.current.set(mdCacheKey, mdMatches);
-              return { md, matches: mdMatches };
             }
+            const mdMatches = await getMatches(selectedLeague, md);
+            matchesCache.current.set(mdCacheKey, mdMatches);
+            return { md, matches: mdMatches };
+          });
+          
+          const results = await Promise.all(matchPromises);
+          const matchdayWithMatches = results.find((result) => result.matches.length > 0);
+          if (matchdayWithMatches) {
+            targetMatchday = matchdayWithMatches.md;
+            matches = matchdayWithMatches.matches;
           }
-        });
-        
-        // Run all matchday checks in parallel
-        const results = await Promise.all(matchPromises);
-        
-        // Find the first matchday that has matches
-        const matchdayWithMatches = results.find(result => result.matches.length > 0);
-        if (matchdayWithMatches) {
-          targetMatchday = matchdayWithMatches.md;
-          matches = matchdayWithMatches.matches;
         }
       }
       
       resetPredictions();
       setCurrentMatchday(targetMatchday);
       setInitialMatches(matches);
-      
-      // Show mode selection directly, without setTimeout
       setShowModeSelection(true);
       setShowPredictions(false);
       
@@ -1820,13 +2062,56 @@ export default function Home() {
     }
   };
 
-  const handleModeSelect = (
+  const handleModeSelect = async (
     mode: 'normal' | 'race', 
     selectedTeams?: number[], 
     unfilteredMatchesMode?: 'auto' | 'draws',
     tableDisplayMode?: 'mini' | 'full'
   ) => {
     console.log(`Mode selected: ${mode}`);
+    
+    if (isReplayForecast && selectedLeague) {
+      setLoading(true);
+      setError(null);
+      try {
+        await ensureFullSeasonData(selectedLeague, standings);
+        const targetMatchday = replayStartMatchday;
+        const matches = await loadMatchdayFixturesForReplay(selectedLeague, targetMatchday);
+
+        if (matches.length === 0) {
+          setError(`No fixtures found for matchday ${targetMatchday}.`);
+          return;
+        }
+
+        setReplayForecastState({
+          leagueCode: selectedLeague,
+          startMatchday: targetMatchday,
+        });
+        setReplayInitialStandings(
+          computeReplayInitialStandings(standings, selectedLeague, targetMatchday)
+        );
+
+        try {
+          const completedMatchesStore = JSON.parse(
+            localStorage.getItem('completedMatches') || '{}'
+          );
+          delete completedMatchesStore[selectedLeague];
+          localStorage.setItem('completedMatches', JSON.stringify(completedMatchesStore));
+        } catch {
+          /* ignore */
+        }
+
+        setCurrentMatchday(targetMatchday);
+        setInitialMatches(matches);
+      } catch (error: unknown) {
+        console.error('Error starting replay forecast:', error);
+        const err = error as ApiError;
+        setError(err.message || 'Failed to load matchday fixtures. Please try again.');
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
     
     if (mode === 'normal') {
       console.log("Setting Classic Mode - resetting race mode settings");
@@ -2549,6 +2834,58 @@ export default function Home() {
     );
   }
 
+  const renderReplayMatchdayDropdown = (maxMd: number) => (
+    <div className="relative inline-block group replay-md-dropdown-container">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsReplayMdDropdownOpen((prev) => !prev);
+        }}
+        disabled={loading}
+        className={`appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 flex items-center justify-center w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] whitespace-nowrap disabled:opacity-50 ${
+          isReplayMdDropdownOpen ? 'bg-[#f7e479] text-black' : ''
+        }`}
+      >
+        Matchday {replayStartMatchday}
+      </button>
+      {isReplayMdDropdownOpen && (
+        <div
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px] overflow-y-auto max-h-[252px]"
+          style={{ border: '2px solid #f7e479' }}
+        >
+          {Array.from({ length: maxMd }, (_, i) => i + 1).map((md) => (
+            <button
+              key={md}
+              type="button"
+              onClick={() => {
+                setReplayStartMatchday(md);
+                setIsReplayMdDropdownOpen(false);
+              }}
+              className={`w-full text-center px-3 py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap hover:bg-[#f7e479] hover:text-black ${
+                md === replayStartMatchday ? 'bg-[#f7e479] text-black' : 'text-primary'
+              }`}
+            >
+              Matchday {md}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 sm:pr-3">
+        <svg
+          className={`h-3 w-3 sm:h-4 sm:w-4 transition-colors duration-300 ${
+            isReplayMdDropdownOpen ? 'text-black' : 'text-[#f7e479]'
+          } group-hover:text-black`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+    </div>
+  );
+
   return (
     <main className="min-h-screen w-full pt-6 pb-1 sm:p-8 bg-background overflow-x-hidden overflow-y-hidden md:overflow-y-auto">
       <div className="w-full sm:max-w-7xl sm:mx-auto px-1 sm:px-0">
@@ -2590,6 +2927,9 @@ export default function Home() {
                 setHistoricalStandings([]);
                 // Clear predicted standings map when going back to league selection
                 setPredictedStandingsByMatchday(new Map());
+                setIsReplayForecast(false);
+                setReplayInitialStandings(null);
+                setReplayForecastState(null);
                 // Reset race mode when returning to league selection
                 resetPredictions();
               }}
@@ -2615,29 +2955,26 @@ export default function Home() {
                             /* Dropdown for forecast mode */
                             currentMatchday > 1 && (
                               <div className="flex items-center gap-2">
-                                <div className={`flex flex-col sm:flex-row items-center ${selectedHistoricalMatchday === null ? 'justify-center sm:justify-start sm:gap-4 min-h-[44px] sm:min-h-0' : 'gap-3 sm:gap-4 justify-start'}`}>
+                                <div className={`flex flex-col sm:flex-row items-center ${!shouldShowCompareToggle() ? 'justify-center sm:justify-start sm:gap-4 min-h-[44px] sm:min-h-0' : 'gap-3 sm:gap-4 justify-start'}`}>
                                   <div className="relative inline-block group historical-dropdown-container">
                                     <button
                                       type="button"
-                                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                      disabled={loadingHistorical || loading}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsDropdownOpen((prev) => !prev);
+                                      }}
+                                      disabled={loading}
                                       className="appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] flex items-center justify-center"
                                     >
-                                    {(() => {
-                                      if (selectedHistoricalMatchday) {
-                                        return `Matchday ${selectedHistoricalMatchday}`;
-                                      }
-                                      // Use single source of truth
-                                      const forecastEndMd = computeForecastEndMd();
-                                      return `Matchday ${forecastEndMd}`;
-                                    })()}
+                                    {`Matchday ${getDisplayedMatchday()}`}
                                   </button>
                                   {isDropdownOpen && (
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px] overflow-y-auto max-h-[252px]" style={{ border: '2px solid #f7e479' }}>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-[100] w-[140px] overflow-y-auto max-h-[252px] min-h-[36px]" style={{ border: '2px solid #f7e479' }}>
                                       {selectedHistoricalMatchday !== null && (
                                         <button
                                           type="button"
-                                          onClick={() => {
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             handleHistoricalMatchdayChange(null);
                                             setIsDropdownOpen(false);
                                           }}
@@ -2645,34 +2982,32 @@ export default function Home() {
                                           onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
                                           onMouseLeave={(e) => e.currentTarget.style.color = ''}
                                         >
-                                          Matchday {viewingFromMatchday || currentMatchday}
+                                          Matchday {computeForecastEndMd()}
                                         </button>
                                       )}
                                       {(() => {
                                         // In forecast mode, show all matchdays from 1 to forecastEndMd
                                         if (viewingFromMatchday !== null) {
-                                          // Use single source of truth
                                           const forecastEndMd = computeForecastEndMd();
+                                          const displayedMd = getDisplayedMatchday();
                                           
-                                          // Show all matchdays from 1 to forecastEndMd, excluding the current viewingFromMatchday
                                           const allMatchdays = Array.from({ length: forecastEndMd }, (_, i) => i + 1)
-                                            .filter(md => {
-                                              // Exclude the current viewing matchday
-                                              if (viewingFromMatchday !== null && Number(md) === Number(viewingFromMatchday)) {
-                                                return false;
-                                              }
-                                              // Exclude the currently selected historical matchday (if any)
-                                              if (selectedHistoricalMatchday !== null && Number(md) === Number(selectedHistoricalMatchday)) {
-                                                return false;
-                                              }
-                                              return true;
-                                            });
+                                            .filter((md) => Number(md) !== Number(displayedMd));
+                                          
+                                          if (allMatchdays.length === 0) {
+                                            return (
+                                              <div className="px-3 py-2 text-xs text-center text-primary opacity-70">
+                                                No other matchdays yet
+                                              </div>
+                                            );
+                                          }
                                           
                                           return allMatchdays.map((md) => (
                                             <button
                                               key={md}
                                               type="button"
-                                              onClick={() => {
+                                              onClick={(e) => {
+                                                e.stopPropagation();
                                                 handleHistoricalMatchdayChange(md);
                                                 setIsDropdownOpen(false);
                                               }}
@@ -2692,7 +3027,8 @@ export default function Home() {
                                             <button
                                               key={md}
                                               type="button"
-                                              onClick={() => {
+                                              onClick={(e) => {
+                                                e.stopPropagation();
                                                 handleHistoricalMatchdayChange(md);
                                                 setIsDropdownOpen(false);
                                               }}
@@ -2713,13 +3049,13 @@ export default function Home() {
                                   </div>
                                 </div>
                                 {/* Compare checkbox - always render to prevent layout shift, hide when not needed */}
-                                <label className={`flex items-center cursor-pointer transition-all duration-300 ${selectedHistoricalMatchday === null ? 'opacity-0 pointer-events-none h-0 overflow-hidden m-0 p-0' : ''}`}>
+                                <label className={`flex items-center cursor-pointer transition-all duration-300 ${!shouldShowCompareToggle() ? 'opacity-0 pointer-events-none h-0 overflow-hidden m-0 p-0' : ''}`}>
                                   <div className="flex items-center border border-[#f7e479] rounded">
                                     <input
                                       type="checkbox"
                                       checked={isComparing}
                                       onChange={(e) => setIsComparing(e.target.checked)}
-                                      disabled={selectedHistoricalMatchday === null}
+                                      disabled={!shouldShowCompareToggle()}
                                       className="h-4 w-4 border-r border-[#f7e479] rounded-l cursor-pointer appearance-none focus:ring-1 focus:ring-[#f7e479] relative flex-shrink-0"
                                       style={{
                                         backgroundColor: isComparing ? '#f7e479' : 'var(--card-bg)',
@@ -2736,13 +3072,23 @@ export default function Home() {
                                     >
                                       <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
                                         {(() => {
-                                          // In forecast mode, never use "today"
+                                          if (isReplayForecast) {
+                                            return 'Compare to Actual';
+                                          }
                                           if (viewingFromMatchday !== null) {
-                                            // Use single source of truth
                                             const forecastEndMd = computeForecastEndMd();
                                             return `Compare to MD ${forecastEndMd}`;
                                           }
-                                          // ONLY in regular mode (viewingFromMatchday === null): show "Compare To Today"
+                                          if (
+                                            selectedLeague &&
+                                            isLeagueSeasonComplete(
+                                              selectedLeague,
+                                              currentMatchday,
+                                              standings
+                                            )
+                                          ) {
+                                            return 'Compare to Actual';
+                                          }
                                           return 'Compare To Today';
                                         })()}
                           </span>
@@ -2765,14 +3111,18 @@ export default function Home() {
                                       e.stopPropagation();
                                       setIsDropdownOpen(prev => !prev);
                                     }}
-                                    disabled={loadingHistorical || loading}
+                                    disabled={loading}
                                     className={`appearance-none bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold cursor-pointer hover:bg-[#f7e479] hover:text-black transition-all duration-300 focus:outline-none focus:bg-[#f7e479] focus:text-black pr-6 sm:pr-8 flex items-center justify-center ${
                                       selectedHistoricalMatchday === null 
                                         ? 'w-[100px] sm:w-[180px] h-auto min-h-[28px] sm:h-[36px] py-1 sm:py-0 whitespace-normal sm:whitespace-nowrap leading-tight' 
                                         : 'w-[160px] sm:w-[180px] h-[28px] sm:h-[36px] whitespace-nowrap'
                                     }`}
                                   >
-                                    {selectedHistoricalMatchday ? `Matchday ${selectedHistoricalMatchday}` : 'Current Standings'}
+                                    {selectedHistoricalMatchday
+                                      ? `Matchday ${selectedHistoricalMatchday}`
+                                      : selectedLeague
+                                        ? getLiveStandingsLabel(selectedLeague, currentMatchday, standings)
+                                        : 'Current Standings'}
                                   </button>
                                   {isDropdownOpen && (
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-card rounded-lg shadow-lg z-50 w-[140px] overflow-y-auto max-h-[252px]" style={{ border: '2px solid #f7e479' }}>
@@ -2787,14 +3137,16 @@ export default function Home() {
                                           onMouseEnter={(e) => e.currentTarget.style.color = '#000000'}
                                           onMouseLeave={(e) => e.currentTarget.style.color = ''}
                                         >
-                                          Current Standings
+                                          {selectedLeague
+                                            ? getLiveStandingsLabel(selectedLeague, currentMatchday, standings)
+                                            : 'Current Standings'}
                                         </button>
                                       )}
                                       {Array.from({ length: Math.max(0, currentMatchday - 1) }, (_, i) => i + 1)
                                         .filter((md) => {
                                           // Filter out the currently selected historical matchday
                                           if (md === selectedHistoricalMatchday) return false;
-                                          // Filter out the last completed matchday (currentMatchday - 1) because it's "Current Standings"
+                                          // Filter out the last completed matchday (shown as Current/Final Standings)
                                           if (md === currentMatchday - 1) return false;
                                           // Only show matchdays before the current one
                                           if (md >= currentMatchday) return false;
@@ -2849,7 +3201,14 @@ export default function Home() {
                                       className="h-4 px-1.5 flex items-center rounded-r bg-card"
                                     >
                                       <span className="text-[10px] font-medium whitespace-nowrap leading-none text-[#f7e479]">
-                                        Compare To Today
+                                        {selectedLeague &&
+                                        isLeagueSeasonComplete(
+                                          selectedLeague,
+                                          currentMatchday,
+                                          standings
+                                        )
+                                          ? 'Compare to Actual'
+                                          : 'Compare To Today'}
                           </span>
                                     </div>
                                   </div>
@@ -2930,17 +3289,43 @@ export default function Home() {
                       Summary
                     </button>
                   )}
-                  {!isViewingStandings && (
-                    <button
-                      onClick={handleStartPredictions}
-                      className="px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-base bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-auto min-h-[28px] sm:h-[36px] flex items-center justify-center leading-tight"
-                    >
-                      <span className="block sm:hidden">
-                        Start<br />Forecasting
-                      </span>
-                      <span className="hidden sm:inline">Start Forecasting</span>
-                    </button>
-                  )}
+                  {!isViewingStandings && selectedLeague && (() => {
+                    const seasonComplete = isLeagueSeasonComplete(
+                      selectedLeague,
+                      currentMatchday,
+                      standings
+                    );
+
+                    if (seasonComplete) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => handleStartPredictions()}
+                          disabled={loading}
+                          className="px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-base bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-auto min-h-[28px] sm:h-[36px] flex items-center justify-center leading-tight disabled:opacity-50"
+                        >
+                          <span className="block sm:hidden">
+                            Start<br />Forecasting
+                          </span>
+                          <span className="hidden sm:inline">Start Forecasting</span>
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleStartPredictions()}
+                        disabled={loading}
+                        className="px-4 py-1 text-xs sm:px-8 sm:py-2 sm:text-base bg-transparent text-[#f7e479] border-2 border-[#f7e479] rounded-full hover:bg-[#f7e479] hover:text-black transition-all duration-300 font-semibold h-auto min-h-[28px] sm:h-[36px] flex items-center justify-center leading-tight disabled:opacity-50"
+                      >
+                        <span className="block sm:hidden">
+                          Start<br />Forecasting
+                        </span>
+                        <span className="hidden sm:inline">Start Forecasting</span>
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -3064,36 +3449,59 @@ export default function Home() {
                 return standings;
               })()} 
               initialStandings={
-                // In forecast mode with selected historical matchday and comparison enabled, compare predicted at selected matchday to predicted final matchday
-                viewingFromMatchday !== null && selectedHistoricalMatchday !== null && isComparing
-                  ? (() => {
-                      // Use forecastEndMd as baseline when comparing to a selected matchday (the final predicted table)
-                      const baselineMd = forecastEndMd;
-                      // Normalize key to Number when reading from Map
-                      const baseline = predictedStandingsByMatchday.get(Number(baselineMd)) ?? predictedStandings;
-                      return baseline;
-                    })()
-                  : isComparing && selectedHistoricalMatchday && historicalStandings.length > 0 && viewingFromMatchday === null
-                    ? standings // Compare historical to current standings (regular mode)
-                  : viewingFromMatchday !== null && selectedHistoricalMatchday === null
+                isReplayForecast &&
+                viewingFromMatchday !== null &&
+                isComparing &&
+                getReplayCompareMatchday() !== null &&
+                historicalStandings.length > 0 &&
+                historicalStandingsForMdRef.current === getReplayCompareMatchday()
+                  ? historicalStandings
+                  : viewingFromMatchday !== null &&
+                      selectedHistoricalMatchday !== null &&
+                      isComparing &&
+                      !isReplayForecast
                     ? (() => {
-                        // In forecast mode viewing current standings: show indicators by default
-                        // Compare predicted standings to actual current standings (today's real table)
-                        // This shows how predictions differ from reality
-                        return standings; // Use actual current standings as baseline
+                        const baselineMd = forecastEndMd;
+                        const baseline =
+                          predictedStandingsByMatchday.get(Number(baselineMd)) ??
+                          predictedStandings;
+                        return baseline;
                       })()
-                  : undefined // No comparison when checkbox is unchecked in other cases
+                    : isComparing &&
+                        selectedHistoricalMatchday &&
+                        historicalStandings.length > 0 &&
+                        viewingFromMatchday === null
+                      ? standings
+                      : viewingFromMatchday !== null && selectedHistoricalMatchday === null && !isReplayForecast
+                        ? standings
+                        : undefined
               }
               compareToCurrent={
-                // In forecast mode: comparing predicted at selected matchday to predicted final matchday when checkbox is checked
-                (viewingFromMatchday !== null && selectedHistoricalMatchday !== null && isComparing) ||
-                // In forecast mode viewing current standings: show indicators by default (always compare)
-                (viewingFromMatchday !== null && selectedHistoricalMatchday === null) ||
-                // In regular mode: comparing historical to current when "Compare To Today" is checked
-                (isComparing && selectedHistoricalMatchday !== null && historicalStandings.length > 0 && viewingFromMatchday === null)
+                (isReplayForecast &&
+                  viewingFromMatchday !== null &&
+                  isComparing &&
+                  getReplayCompareMatchday() !== null &&
+                  historicalStandings.length > 0 &&
+                  historicalStandingsForMdRef.current === getReplayCompareMatchday()) ||
+                (viewingFromMatchday !== null &&
+                  selectedHistoricalMatchday !== null &&
+                  isComparing &&
+                  !isReplayForecast) ||
+                (viewingFromMatchday !== null &&
+                  selectedHistoricalMatchday === null &&
+                  !isReplayForecast) ||
+                (isComparing &&
+                  selectedHistoricalMatchday !== null &&
+                  historicalStandings.length > 0 &&
+                  viewingFromMatchday === null)
               }
               isForecastMode={viewingFromMatchday !== null}
-              isComparingToPast={viewingFromMatchday !== null && selectedHistoricalMatchday !== null && isComparing}
+              isComparingToPast={
+                viewingFromMatchday !== null &&
+                selectedHistoricalMatchday !== null &&
+                isComparing &&
+                !isReplayForecast
+              }
               loading={loadingHistorical} 
               leagueCode={selectedLeague || undefined}
               selectedTeamIds={isRaceMode ? selectedTeamIds : undefined}
@@ -3128,18 +3536,39 @@ export default function Home() {
             )}
           </div>
         ) : showModeSelection ? (
-          <ModeSelection 
-            leagueCode={selectedLeague || ''}
-            standings={standings}
-            onModeSelect={handleModeSelect}
-          />
+          <>
+            {isReplayForecast && selectedLeague && (
+              <div className="mb-2 sm:mb-3 flex flex-col items-center gap-2 px-2">
+                <p className="text-sm sm:text-base font-bold text-[#f7e479]">
+                  {getFootballSeasonLabel()} Season Over
+                </p>
+                <p className="text-xs sm:text-sm text-secondary text-center max-w-lg leading-snug">
+                  The real season is finished. Replay from matchday 1, or pick a later matchday to
+                  start forecasting mid-season. Standings are set from actual results through the
+                  week before your chosen round.
+                </p>
+                {renderReplayMatchdayDropdown(getMaxMatchday(selectedLeague))}
+              </div>
+            )}
+            <ModeSelection 
+              leagueCode={selectedLeague || ''}
+              standings={isReplayForecast && replayInitialStandings ? replayInitialStandings : standings}
+              onModeSelect={handleModeSelect}
+              compact={isReplayForecast}
+            />
+          </>
         ) : (
           <div className="bg-card rounded-lg p-6 mx-1 sm:mx-2 md:mx-3 mb-4 sm:mb-6">
             {selectedLeague ? (
               <PredictionForm
                 leagueCode={selectedLeague}
-                initialStandings={standings}
+                initialStandings={
+                  isReplayForecast && replayInitialStandings
+                    ? replayInitialStandings
+                    : standings
+                }
                 initialMatches={initialMatches}
+                isReplaySeason={isReplayForecast}
               />
             ) : (
               <div className="text-center py-8 text-red-500 font-bold">

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { deriveCurrentMatchday } from '@/lib/matchday';
 import { Match, Prediction, MatchResult } from '@/types/predictions';
 
 const LEAGUE_NAME_MAPPING: { [key: string]: string } = {
@@ -264,36 +265,7 @@ export const getCurrentMatchday = async (leagueCode: string): Promise<number> =>
       awayTeam: { id: number; name: string };
     }
     
-    const scheduledMatches = response.data.matches.filter(
-      (m: ApiMatch) => m.status === 'SCHEDULED' || m.status === 'TIMED'
-    );
-    
-    if (scheduledMatches.length === 0) {
-      return 1;
-    }
-    
-    // For UCL, start from matchday 4 (current matchday in 25-26 season)
-    if (leagueCode === 'CL') {
-      // Find the current matchday by looking for the earliest upcoming matchday >= 4
-      const upcomingMatchdays = scheduledMatches.map((m: ApiMatch) => m.matchday);
-      const filteredMatchdays = upcomingMatchdays.filter((md: number) => md >= 4);
-      
-      if (filteredMatchdays.length === 0) {
-        return 4;
-      }
-      
-      const currentMatchday = Math.min(...filteredMatchdays);
-      
-      // Handle case where API returns 0 or invalid matchday
-      if (currentMatchday === 0 || currentMatchday < 4) {
-        return 4;
-      }
-      
-      return currentMatchday;
-    }
-    
-    // For other leagues, use the minimum upcoming matchday
-    return Math.min(...scheduledMatches.map((m: ApiMatch) => m.matchday));
+    return deriveCurrentMatchday(leagueCode, response.data.matches as ApiMatch[]);
   });
 };
 
@@ -493,9 +465,14 @@ export const getAllLeaguesData = async (): Promise<Record<string, { standings: S
         };
       });
       
+      const currentMatchday =
+        mappedMatches.length > 0
+          ? deriveCurrentMatchday(leagueCode, mappedMatches)
+          : typedLeagueData.currentMatchday || 1;
+
       mappedLeagues[leagueCode] = {
         standings: mappedStandings || [],
-        currentMatchday: typedLeagueData.currentMatchday || 1,
+        currentMatchday,
         matches: mappedMatches
       };
     });

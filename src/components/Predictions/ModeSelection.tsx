@@ -6,9 +6,11 @@ interface ModeSelectionProps {
   leagueCode: string;
   standings: Standing[];
   onModeSelect: (mode: 'normal' | 'race', selectedTeams?: number[], unfilteredMatchesMode?: 'auto' | 'draws', tableDisplayMode?: 'mini' | 'full') => void;
+  /** Tighter layout when shown with end-of-season replay header */
+  compact?: boolean;
 }
 
-export default function ModeSelection({ standings, onModeSelect }: ModeSelectionProps) {
+export default function ModeSelection({ standings, onModeSelect, compact = false }: ModeSelectionProps) {
   const [mode, setMode] = useState<'normal' | 'race' | null>(null);
   const [selectedTeams, setSelectedTeams] = useState<number[]>([]);
   const [unfilteredMatchesMode, setUnfilteredMatchesMode] = useState<'auto' | 'draws'>('auto');
@@ -52,17 +54,33 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
   };
 
   return (
-    <div className="bg-card rounded-lg p-4 sm:p-6 max-[750px]:py-6 max-[750px]:min-h-[450px] max-[750px]:mb-8 max-[750px]:mx-2">
+    <div
+      className={`bg-card rounded-lg max-[750px]:mx-2 ${
+        compact
+          ? 'p-3 sm:p-4 max-[750px]:py-4 max-[750px]:min-h-0 max-[750px]:mb-4'
+          : 'p-4 sm:p-6 max-[750px]:py-6 max-[750px]:min-h-[450px] max-[750px]:mb-8'
+      }`}
+    >
       {!showUnfilteredOptions ? (
         <>
-          <div className="flex justify-center items-center mb-4 sm:mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-primary">Select Forecast Mode</h2>
+          <div
+            className={`flex justify-center items-center ${compact ? 'mb-2 sm:mb-3' : 'mb-4 sm:mb-6'}`}
+          >
+            <h2 className={`font-bold text-primary ${compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}>
+              Select Forecast Mode
+            </h2>
           </div>
           
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-6 sm:mb-8 md:grid-cols-2">
+          <div
+            className={`grid grid-cols-1 md:grid-cols-2 ${
+              compact ? 'gap-3 mb-3 sm:mb-4' : 'gap-4 sm:gap-6 mb-6 sm:mb-8'
+            }`}
+          >
             {/* Normal Mode */}
             <div 
-              className={`bg-[#111111] rounded-lg p-4 sm:p-6 border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${mode === 'normal' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
+              className={`bg-[#111111] rounded-lg border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${
+                compact ? 'p-3 sm:p-4' : 'p-4 sm:p-6'
+              } ${mode === 'normal' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
               onClick={() => setMode('normal')}
             >
               <h3 className="text-lg sm:text-xl font-bold text-[#f7e479] mb-2 sm:mb-3 text-center">Classic Mode</h3>
@@ -76,7 +94,9 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
             
             {/* Race Mode */}
             <div 
-              className={`bg-[#111111] rounded-lg p-4 sm:p-6 border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${mode === 'race' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
+              className={`bg-[#111111] rounded-lg border-2 cursor-pointer transition-all duration-300 hover:border-[#f7e479] flex flex-col ${
+                compact ? 'p-3 sm:p-4' : 'p-4 sm:p-6'
+              } ${mode === 'race' ? 'border-[#f7e479]' : 'border-[#2a2a2a]'}`}
               onClick={() => setMode('race')}
             >
               <h3 className="text-lg sm:text-xl font-bold text-[#f7e479] mb-2 sm:mb-3 text-center">Race Mode</h3>
@@ -90,7 +110,15 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
           </div>
           
           {/* Race Mode Configuration - Team Selection */}
-          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${mode === 'race' ? 'max-h-[2000px] opacity-100 mt-4 sm:mt-6 mb-6 sm:mb-8' : 'max-h-0 opacity-0'}`}> 
+          <div
+            className={`overflow-hidden transition-all duration-500 ease-in-out ${
+              mode === 'race'
+                ? compact
+                  ? 'max-h-[2000px] opacity-100 mt-3 mb-4'
+                  : 'max-h-[2000px] opacity-100 mt-4 sm:mt-6 mb-6 sm:mb-8'
+                : 'max-h-0 opacity-0'
+            }`}
+          > 
             <div className="transform transition-transform duration-500 ease-in-out" style={{ transform: mode === 'race' ? 'translateY(0)' : 'translateY(-20px)' }}>
               {/* Team Selection */}
               <h3 className="text-base sm:text-lg font-semibold text-primary mb-3 sm:mb-4">Select teams to include (max 10):</h3>
@@ -127,7 +155,11 @@ export default function ModeSelection({ standings, onModeSelect }: ModeSelection
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-0 mt-6 sm:mt-8">
+          <div
+            className={`flex flex-col sm:flex-row justify-center gap-3 sm:gap-0 ${
+              compact ? 'mt-3 sm:mt-4' : 'mt-6 sm:mt-8'
+            }`}
+          >
             <button
               onClick={handleContinue}
               disabled={mode === null || (mode === 'race' && selectedTeams.length === 0)}

@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { cacheService } from '@/lib/cache/CacheService';
+import { getDevHttpsAgent } from '@/lib/http/httpsAgent';
+import { deriveCurrentMatchday } from '@/lib/matchday';
 import { Match } from '@/types/predictions';
 import { Standing } from '@/types/standings';
 
@@ -37,7 +39,8 @@ export class FootballDataManager {
       if (process.env.NODE_ENV === 'development') {
         console.log(`📊 Cache hit for ${leagueCode}`);
       }
-      return { ...data, source: 'cache' as const };
+      const currentMatchday = deriveCurrentMatchday(leagueCode, data.matches ?? []);
+      return { ...data, currentMatchday, source: 'cache' as const };
     }
     
     // Check if there's already an in-flight request for this league
@@ -96,40 +99,8 @@ export class FootballDataManager {
       
       // Process matches - return ALL matches (both completed and upcoming) for forms and historical data
       const allMatches = matchesResponse.data.matches;
-      const now = new Date();
-      
-      // Filter for upcoming matches only (for current matchday calculation)
-      const upcomingMatches = allMatches.filter((match: Match) => {
-        const matchDate = new Date(match.utcDate);
-        const isUpcoming = matchDate > now;
-        const isValidStatus = ['SCHEDULED', 'TIMED'].includes(match.status);
-        return isUpcoming && isValidStatus;
-      });
-      
-      // Return ALL matches (not just upcoming) so forms and historical data can use them
-      // The matches array will contain both completed and upcoming matches
 
-      // Calculate current matchday
-      let currentMatchday: number;
-      if (leagueCode === 'CL') {
-        // For UCL, start from matchday 4 (current matchday in 25-26 season)
-        const upcomingMatchdays = upcomingMatches.map((m: Match) => m.matchday);
-        const filteredMatchdays = upcomingMatchdays.filter((md: number) => md >= 4);
-        
-        currentMatchday = filteredMatchdays.length > 0 
-          ? Math.min(...filteredMatchdays)
-          : 4;
-        
-        // Handle case where API returns 0 or invalid matchday
-        if (currentMatchday === 0 || currentMatchday < 4) {
-          currentMatchday = 4;
-        }
-      } else {
-        // For other leagues, use the minimum upcoming matchday
-        currentMatchday = upcomingMatches.length > 0
-          ? Math.min(...upcomingMatches.map((m: Match) => m.matchday))
-          : 1;
-      }
+      const currentMatchday = deriveCurrentMatchday(leagueCode, allMatches);
 
       const data: FootballApiData = {
         standings,
@@ -140,7 +111,7 @@ export class FootballDataManager {
       };
 
       if (process.env.NODE_ENV === 'development') {
-        console.log(`✅ Fetched ${leagueCode}: ${allMatches.length} total matches (${upcomingMatches.length} upcoming), matchday ${currentMatchday}`);
+        console.log(`✅ Fetched ${leagueCode}: ${allMatches.length} total matches, current matchday ${currentMatchday}`);
       }
       return data;
       
